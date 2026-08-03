@@ -13,7 +13,6 @@ export default function StretchSignalsPanel({ event }) {
 
   const [factMatches, setFactMatches] = useState([])
   const [factLoading, setFactLoading] = useState(false)
-  const [factError, setFactError] = useState(null)
   const [sentinelLoading, setSentinelLoading] = useState(false)
   const [sentinelError, setSentinelError] = useState(null)
   const [localScene, setLocalScene] = useState(null)
@@ -26,20 +25,17 @@ export default function StretchSignalsPanel({ event }) {
   useEffect(() => {
     if (!event?.title || hasFactCheckFields) {
       setFactMatches([])
-      setFactError(null)
       return
     }
     let cancelled = false
     setFactLoading(true)
-    setFactError(null)
     fetchFactCheckClaims(event.title)
       .then((data) => {
         if (cancelled) return
         setFactMatches(data.claims?.slice(0, 3) || [])
-        if (data.warning && !data.claims?.length) setFactError(data.warning)
       })
-      .catch((err) => {
-        if (!cancelled) setFactError(err.message || 'Fact check lookup failed')
+      .catch(() => {
+        if (!cancelled) setFactMatches([])
       })
       .finally(() => {
         if (!cancelled) setFactLoading(false)
@@ -111,13 +107,10 @@ export default function StretchSignalsPanel({ event }) {
         </div>
       )}
 
-      {!hasFactCheckFields && (factLoading || factMatches.length > 0 || factError) && (
+      {!hasFactCheckFields && (factLoading || factMatches.length > 0) && (
         <div className="stretch-signals-block">
           <span className="event-meta-label">Related fact checks</span>
           {factLoading && <div className="stretch-signals-hint">Searching ClaimReview…</div>}
-          {factError && !factMatches.length && (
-            <div className="stretch-signals-hint stretch-signals-warn">{factError}</div>
-          )}
           {factMatches.map((c, i) => (
             <div key={i} className="stretch-fact-match">
               <span className="stretch-fact-check-rating">{c.rating}</span>
@@ -172,7 +165,7 @@ export default function StretchSignalsPanel({ event }) {
             </>
           )}
           <div className="stretch-signals-hint">
-            Copernicus Data Space — on-demand L2A ($0 catalog)
+            Sentinel-2 L2A — on-demand catalog ($0)
           </div>
         </div>
       )}

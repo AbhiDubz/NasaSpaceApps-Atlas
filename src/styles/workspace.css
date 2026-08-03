@@ -89,7 +89,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #00cfff;
+  background: #6a9fb2;
   box-shadow: none;
   animation: ws-pulse 2s ease-in-out infinite;
 }
@@ -107,7 +107,7 @@
   border-radius: 999px;
   border: 1px solid rgba(0, 207, 255, 0.35);
   background: rgba(0, 207, 255, 0.1);
-  color: #00cfff;
+  color: #6a9fb2;
   font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 600;
@@ -161,7 +161,7 @@
   border: 1px solid rgba(0, 207, 255, 0.25);
   border-radius: 6px;
   background: rgba(0, 207, 255, 0.08);
-  color: #00cfff;
+  color: #6a9fb2;
   font-family: var(--font-data);
   font-size: 9px;
   letter-spacing: 0.1em;
@@ -290,7 +290,7 @@
 
 .ws-timeline__add:hover {
   border-color: rgba(0, 207, 255, 0.35);
-  color: #00cfff;
+  color: #6a9fb2;
 }
 
 .ws-timeline__add.is-on-canvas {
@@ -350,7 +350,7 @@
   border-radius: 8px;
   border: 1px solid rgba(0, 207, 255, 0.35);
   background: rgba(0, 207, 255, 0.1);
-  color: #00cfff;
+  color: #6a9fb2;
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 600;
@@ -410,7 +410,7 @@
   border-radius: 8px;
   border: 1px solid rgba(0, 207, 255, 0.4);
   background: rgba(0, 207, 255, 0.12);
-  color: #00cfff;
+  color: #6a9fb2;
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
@@ -429,39 +429,34 @@
 }
 
 .ws-card:hover {
-  border-color: rgba(0, 207, 255, 0.25);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 207, 255, 0.08);
-  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  transform: none;
 }
 
 .ws-card__visual {
   position: relative;
   height: 100px;
-  background: linear-gradient(135deg, rgba(3, 7, 18, 0.9), rgba(8, 16, 32, 0.95));
+  background: rgba(7, 11, 18, 0.92);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
 
 .ws-card__grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 20px 20px;
+  display: none;
 }
 
 .ws-card__region-marker {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 48px;
-  height: 48px;
-  margin: -24px 0 0 -24px;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
   border-radius: 50%;
-  border: 2px solid var(--ws-accent, #00cfff);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--ws-accent, #00cfff) 40%, transparent);
-  opacity: 0.7;
+  border: 1px solid var(--ws-accent, #6a9fb2);
+  box-shadow: none;
+  opacity: 0.75;
 }
 
 .ws-card__body {
@@ -562,7 +557,7 @@
   flex: 1.4;
   border-color: rgba(0, 207, 255, 0.35);
   background: rgba(0, 207, 255, 0.1);
-  color: #00cfff;
+  color: #6a9fb2;
   font-weight: 600;
 }
 
@@ -690,7 +685,7 @@
 .ws-dim-chip.is-selected {
   border-color: rgba(0, 207, 255, 0.4);
   background: rgba(0, 207, 255, 0.1);
-  color: #00cfff;
+  color: #6a9fb2;
 }
 
 .ws-dim-grid {
@@ -727,7 +722,7 @@
 .ws-modal__btn--primary {
   border-color: rgba(0, 207, 255, 0.4);
   background: rgba(0, 207, 255, 0.12);
-  color: #00cfff;
+  color: #6a9fb2;
   font-weight: 600;
 }
 
@@ -799,8 +794,8 @@
 }
 
 .canvas-node.is-selected {
-  border-color: var(--node-accent, #00cfff);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--node-accent, #00cfff) 30%, transparent);
+  border-color: var(--node-accent, #6a9fb2);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--node-accent, #6a9fb2) 30%, transparent);
 }
 
 .canvas-node__header {

@@ -83,18 +83,23 @@ function regionKeyForCountry(feat) {
 function buildEventFeatures(markers) {
   return markers
     .filter((vm) => vm.lat != null && vm.lng != null)
-    .map((vm) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [vm.lng, vm.lat] },
-      properties: {
-        color: vm.color,
-        radius_min: Math.max(3, (vm.severity || 1) * 1.5),
-        radius_max: Math.max(6, (vm.severity || 1) * 4),
-        opacity: vm.raw?.opacity ?? 0.8,
-        _isEvent: true,
-        _eventData: JSON.stringify(vm.raw),
-      },
-    }))
+    .map((vm) => {
+      const family = vm.hazardEffect?.family
+      const pulse = family ? 1.15 : 1
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [vm.lng, vm.lat] },
+        properties: {
+          color: vm.color,
+          radius_min: Math.max(3, (vm.severity || 1) * 1.5 * pulse),
+          radius_max: Math.max(6, (vm.severity || 1) * 4 * pulse),
+          opacity: vm.raw?.opacity ?? 0.8,
+          hazard_family: family || '',
+          _isEvent: true,
+          _eventData: JSON.stringify(vm.raw),
+        },
+      }
+    })
 }
 
 export default function FlatMap({ onGlobeReady }) {

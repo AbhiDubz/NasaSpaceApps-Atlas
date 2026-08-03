@@ -256,6 +256,24 @@ function InnerLandingMap() {
     return () => clearTimeout(t)
   }, [finalizeReady])
 
+  // <gmp-map-3d> is focusable by default, which lands keyboard users on a
+  // decorative background map before the nav — with no focus ring, and with
+  // arrow keys panning instead of scrolling. The element mounts asynchronously,
+  // so poll briefly for it. Pointer orbit and marker clicks are unaffected.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const el = map3dRef.current?.map3d
+      if (!el) return
+      el.tabIndex = -1
+      clearInterval(id)
+    }, 200)
+    const stop = setTimeout(() => clearInterval(id), 15000)
+    return () => {
+      clearInterval(id)
+      clearTimeout(stop)
+    }
+  }, [])
+
   useEffect(() => {
     if (reduceMotion) return
     const spin = () => {

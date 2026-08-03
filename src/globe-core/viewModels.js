@@ -19,6 +19,9 @@ import {
   trackSizePx,
   truthLabel,
 } from '../core/markerArchetype'
+import { getHazardEffectProfile } from '../core/environmentHazardEffects'
+import { getHazardModelUrl } from '../core/hazardModelCatalog'
+import { resolveHazardFill, resolveSignalFill } from '../core/hazardColors'
 
 const REVEAL_MS = 450
 
@@ -36,8 +39,8 @@ function withRevealOpacity(vm, layerKey, layerRevealAt, cacheStale = false) {
 }
 
 export const TRACK_COLORS = {
-  aircraft: '#00d4ff',
-  aircraftMilitary: '#ff6b35',
+  aircraft: '#a8b4c2',
+  aircraftMilitary: '#c47a52',
   vessel: '#4dd4ff',
   satellite: '#c8ff00',
   satelliteMilitary: '#ff6b35',
@@ -57,11 +60,15 @@ export function rgbaFromHex(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
-/** Shared pin color — unlabeled signal, not a taxonomy swatch. */
-export const SIGNAL_MARKER_COLOR = '#1a90ff'
+/** Fallback pin color when hazard type is unknown. */
+export const SIGNAL_MARKER_COLOR = '#536b82'
 
-export function eventMarkerColor(_evt) {
-  return SIGNAL_MARKER_COLOR
+/** Hazard-type family color, darkened by severity; non-hazard → slate ladder. */
+export function eventMarkerColor(evt) {
+  if (evt?.environmentHazard) {
+    return resolveHazardFill(evt.environmentHazard, evt.severity)
+  }
+  return resolveSignalFill(evt?.severity)
 }
 
 export function eventMarkerRadiusGl(evt) {
@@ -85,6 +92,23 @@ export function vmRenderChannel(vm) {
   }
   if (vm.archetype === MARKER_ARCHETYPES.PIN) return 'sprite'
   return 'track'
+}
+
+function attachHazardEffect(vm, enriched) {
+  const hazard = enriched.environmentHazard || null
+  const profile = getHazardEffectProfile(hazard)
+  if (!profile) {
+    vm.hazardEffect = null
+    vm.modelUrl = ''
+    return vm
+  }
+  vm.hazardEffect = profile
+  vm.modelUrl = getHazardModelUrl(profile.modelId)
+  const anim2d = profile.anim2dClass
+  if (anim2d) {
+    vm.animationClass = [vm.animationClass, anim2d].filter(Boolean).join(' ')
+  }
+  return vm
 }
 
 function pinVM(evt) {
@@ -113,7 +137,7 @@ function pinVM(evt) {
     truth: truthLabel(MARKER_ARCHETYPES.PIN, enriched),
     raw: enriched,
   }
-  return vm
+  return attachHazardEffect(vm, enriched)
 }
 
 function trackVM(evt, trackSubtype) {
@@ -128,8 +152,11 @@ function trackVM(evt, trackSubtype) {
       : trackSubtype === 'vessel' ? 0.4 : 0.32
 
   const enriched = trackSubtype === 'storm' ? enrichEventMarkerVisuals(evt) : evt
+  if (trackSubtype === 'storm' && enriched.environmentHazard) {
+    color = resolveHazardFill(enriched.environmentHazard, enriched.severity ?? evt.severity)
+  }
 
-  return {
+  const vm = {
     id: evt.id,
     archetype: MARKER_ARCHETYPES.TRACK,
     trackSubtype,
@@ -152,6 +179,12 @@ function trackVM(evt, trackSubtype) {
     truth: truthLabel(MARKER_ARCHETYPES.TRACK, evt),
     raw: enriched,
   }
+  if (trackSubtype === 'storm') attachHazardEffect(vm, enriched)
+  else {
+    vm.hazardEffect = null
+    vm.modelUrl = ''
+  }
+  return vm
 }
 
 /**

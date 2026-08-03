@@ -14,7 +14,7 @@
  *
  * Day/night cycle reference: https://globe.gl/example/day-night-cycle/
  */
-import { useEffect, useRef, startTransition, useState } from 'react'
+import { useEffect, useRef, startTransition, useState, useMemo, useCallback } from 'react'
 import useShareCameraBridge from '../../hooks/useShareCameraBridge'
 import Globe from 'globe.gl'
 import {
@@ -45,6 +45,7 @@ import { activeGibsImageryKey, gibsTileEngineUrlForKey } from '../../config/gibs
 import { buildTerminatorRing } from '../../core/solarTerminator'
 import { showDetectionLabel as getDetectionLabel } from '../../core/detectionLabels'
 import WindParticleOverlay from './WindParticleOverlay'
+import HazardHeroOverlay from './HazardHeroOverlay'
 
 // Textures (CDN)
 const EARTH_DAY = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-day.jpg'
@@ -236,6 +237,40 @@ export default function GlobeGLView({ onGlobeReady }) {
     const isMobile = isMobileDevice()
 
     const { allMarkers, choropleth, heatmapPoints, stormOverlays } = useGlobeViewModels()
+
+    const heroSites = useMemo(() => {
+        return allMarkers
+            .filter((vm) => vm.hazardEffect?.heroParticles && vm.lat != null && vm.lng != null)
+            .sort((a, b) => (b.severity || 0) - (a.severity || 0))
+            .slice(0, 5)
+            .map((vm) => ({
+                id: vm.id,
+                lat: vm.lat,
+                lng: vm.lng,
+                family: vm.hazardEffect.family,
+                severity: vm.severity,
+            }))
+    }, [allMarkers])
+
+    const projectHero = useCallback((lat, lng) => {
+        const globe = globeRef.current
+        const container = containerRef.current
+        if (!globe || !container) return null
+        try {
+            const coords = globe.getScreenCoords?.(lat, lng)
+            if (!coords || !Number.isFinite(coords.x) || !Number.isFinite(coords.y)) {
+                return { x: 0, y: 0, visible: false }
+            }
+            const visible =
+                coords.x >= -40 &&
+                coords.y >= -40 &&
+                coords.x <= container.clientWidth + 40 &&
+                coords.y <= container.clientHeight + 40
+            return { x: coords.x, y: coords.y, visible }
+        } catch {
+            return null
+        }
+    }, [])
 
     const setZoomLevel = useAtlasStore((s) => s.setZoomLevel)
 
@@ -494,6 +529,9 @@ export default function GlobeGLView({ onGlobeReady }) {
                 img.draggable = false
                 img.style.display = 'block'
                 img.style.opacity = String(opacity)
+                const hazardClass = d.hazardEffect?.anim2dClass || ''
+                const pulseClass = d.animationClass || ''
+                img.className = ['atlas-marker--pin', pulseClass, hazardClass].filter(Boolean).join(' ')
                 el.appendChild(img)
                 el.onclick = (ev) => {
                     ev.stopPropagation()
@@ -847,6 +885,11 @@ export default function GlobeGLView({ onGlobeReady }) {
                 style={{ cursor: 'grab', background: '#030712' }}
             />
             <WindParticleOverlay enabled={windOn} />
+            <HazardHeroOverlay
+                enabled={globeReady && heroSites.length > 0}
+                heroes={heroSites}
+                project={projectHero}
+            />
         </div>
     )
 }

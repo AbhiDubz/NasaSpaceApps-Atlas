@@ -50,6 +50,19 @@ const FEEDS = {
     cacheSec: 300,
     type: 'json',
   },
+  // White House / State Dept RSS omit CORS — same-origin proxy required for the worker.
+  'whitehouse-briefing': {
+    url: 'https://www.whitehouse.gov/news/feed/',
+    cacheSec: 600,
+    type: 'text',
+    accept: 'application/rss+xml, application/xml, text/xml, */*',
+  },
+  'state-dept': {
+    url: 'https://www.state.gov/rss-feed/press-releases/feed/',
+    cacheSec: 600,
+    type: 'text',
+    accept: 'application/rss+xml, application/xml, text/xml, */*',
+  },
 }
 
 export default async function handler(req) {

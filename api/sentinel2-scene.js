@@ -1,6 +1,7 @@
 /**
  * GET /api/sentinel2-scene?lat=48.8&lng=2.3&days=30
- * Copernicus Data Space STAC search for Sentinel-2 L2A ($0, no key for catalog).
+ * Sentinel-2 L2A STAC search ($0 catalog). Prefers Element84 Earth Search
+ * (reliable); falls back to Copernicus Data Space if needed.
  * Returns best (lowest cloud cover) scene thumbnail + metadata for an AOI.
  */
 
@@ -8,7 +9,19 @@ export const config = {
   runtime: 'edge',
 }
 
-const STAC_URL = 'https://catalogue.dataspace.copernicus.eu/stac/search'
+const STAC_ENDPOINTS = [
+  {
+    name: 'element84',
+    url: 'https://earth-search.aws.element84.com/v1/search',
+    collections: ['sentinel-2-l2a'],
+  },
+  {
+    name: 'copernicus',
+    url: 'https://catalogue.dataspace.copernicus.eu/stac/search',
+    collections: ['sentinel-2-l2a'],
+  },
+]
+
 const CACHE_MS = 300_000
 /** @type {Map<string, { body: string, ts: number }>} */
 const cache = new Map()
@@ -16,6 +29,20 @@ const cache = new Map()
 function parseCoord(val, fallback) {
   const n = Number(val)
   return Number.isFinite(n) ? n : fallback
+}
+
+async function searchStac(endpoint, body) {
+  const res = await fetch(endpoint.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ ...body, collections: endpoint.collections }),
+    signal: AbortSignal.timeout(12_000),
+  })
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(`${endpoint.name} STAC HTTP ${res.status}${errText ? `: ${errText.slice(0, 120)}` : ''}`)
+  }
+  return res.json()
 }
 
 export default async function handler(req) {
@@ -69,7 +96,6 @@ export default async function handler(req) {
   const start = new Date(end.getTime() - days * 86400_000)
 
   const body = {
-    collections: ['sentinel-2-l2a'],
     bbox,
     datetime: `${start.toISOString()}/${end.toISOString()}`,
     limit: 5,
@@ -77,19 +103,18 @@ export default async function handler(req) {
   }
 
   try {
-    const res = await fetch(STAC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(20_000),
-    })
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '')
-      throw new Error(`Copernicus STAC HTTP ${res.status}${errText ? `: ${errText.slice(0, 120)}` : ''}`)
+    let data = null
+    let lastErr = null
+    for (const endpoint of STAC_ENDPOINTS) {
+      try {
+        data = await searchStac(endpoint, body)
+        break
+      } catch (err) {
+        lastErr = err
+      }
     }
+    if (!data) throw lastErr || new Error('Sentinel-2 STAC search failed')
 
-    const data = await res.json()
     const features = data?.features || []
     if (!features.length) {
       const empty = JSON.stringify({
@@ -111,8 +136,9 @@ export default async function handler(req) {
     const assets = best.assets || {}
     const thumb =
       assets.thumbnail?.href ||
+      assets.overview?.href ||
+      assets.preview?.href ||
       assets.visual?.href ||
-      assets['preview']?.href ||
       null
     const sceneBbox = best.bbox || bbox
 

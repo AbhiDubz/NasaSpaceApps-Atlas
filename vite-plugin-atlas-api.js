@@ -66,7 +66,9 @@ const DEV_API_ROUTES = [
   { methods: ['GET', 'OPTIONS'], match: /^\/api\/indicators\/?$/, module: path.join(pluginRoot, 'api/indicators.js') },
   { methods: ['GET', 'OPTIONS'], match: /^\/api\/bluesky-posts\/?$/, module: path.join(pluginRoot, 'api/bluesky-posts.js') },
   { methods: ['GET', 'OPTIONS'], match: /^\/api\/fact-check-claims\/?$/, module: path.join(pluginRoot, 'api/fact-check-claims.js') },
+  { methods: ['GET', 'OPTIONS'], match: /^\/api\/sentinel2-scene\/?$/, module: path.join(pluginRoot, 'api/sentinel2-scene.js') },
   { methods: ['GET', 'POST', 'OPTIONS'], match: /^\/api\/entities\/?$/, module: path.join(pluginRoot, 'api/entities.js') },
+  { methods: ['POST', 'OPTIONS'], match: /^\/api\/contact\/?$/, module: path.join(pluginRoot, 'api/contact.js') },
   { methods: ['POST', 'OPTIONS'], match: /^\/api\/export-report\/?$/, module: path.join(pluginRoot, 'api/export-report.js'), style: 'node' },
   { methods: ['GET', 'OPTIONS'], match: /^\/api\/export-report-status\/?$/, module: path.join(pluginRoot, 'api/export-report-status.js'), style: 'node' },
 ]

@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Iconify pull cache (regenerate with npm run icons:pull)
+scripts/.icon-cache/
+# Earth History bake caches (PaleoDEM CSV zip, Cliopatria, …)
+scripts/earth-history/.cache/*
+!scripts/earth-history/.cache/.gitkeep
+
 # Environment variables (API keys)
 .env
 .env.*

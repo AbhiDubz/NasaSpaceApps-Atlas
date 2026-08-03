@@ -1,17 +1,15 @@
-# Space background — NASA SVS Deep Star Maps 2020
+# Space background — NASA SVS “An Elsewhere Starfield”
 
-The globe uses the **NASA SVS Deep Star Maps 2020** as the only space background (no Cesium default).
+Earth History uses NASA’s randomized star map as the globe sky sphere.
 
-- **Official page:** https://svs.gsfc.nasa.gov/4851#media_group_319116  
-- **Asset:** 1.7B stars from Hipparcos-2, Tycho-2, Gaia DR2
+- **Official page:** https://svs.gsfc.nasa.gov/4856#media_group_319133  
+- **Credit:** NASA’s Scientific Visualization Studio
 
-The app tries to load the image from NASA’s server first. If that fails (e.g. CORS), it falls back to a local file.
+## Files served by the app
 
-**To use a local copy:**  
-Download **starmap_2020_4k_print.jpg** (1024×512) from the [NASA SVS 4851 Downloads](https://svs.gsfc.nasa.gov/4851#media_group_319116) and place it in this folder:
+| File | Resolution | Use |
+|------|------------|-----|
+| `starmap_random_2020_8k.jpg` | 8192×4096 | Desktop / default |
+| `starmap_random_2020_4k.jpg` | 4096×2048 | Mobile / touch |
 
-```
-public/starfield/starmap_2020_4k_print.jpg
-```
-
-Then the skybox will use this file instead of the remote URL.
+Derived from `starmap_random_2020_8k.exr` on the SVS page (do not commit the EXR).

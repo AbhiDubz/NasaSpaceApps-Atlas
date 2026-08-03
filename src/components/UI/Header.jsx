@@ -17,6 +17,7 @@ import {
   FileText,
   PersonStanding,
   Radar,
+  History,
   X,
 } from 'lucide-react'
 import { useAtlasStore } from '../../store/atlasStore'
@@ -287,6 +288,15 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
               >
                 <Crosshair size={ICON_SIZE} />
               </button>
+
+              <a
+                href="/earth-history"
+                className="hud-icon-btn hud-icon-btn--link"
+                title="Earth History — deep-time paleogeography"
+                aria-label="Open Earth History"
+              >
+                <History size={ICON_SIZE} />
+              </a>
             </>
           )}
 
@@ -376,6 +386,14 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
                     <Crosshair size={ICON_SIZE} />
                     <span>Reset View</span>
                   </button>
+                  <a
+                    href="/earth-history"
+                    className="hud-dropdown-item"
+                    onClick={() => setMoreOpen(false)}
+                  >
+                    <History size={ICON_SIZE} />
+                    <span>Earth History</span>
+                  </a>
                   <button
                     className="hud-dropdown-item"
                     onClick={() => { onToggleHud?.(); setMoreOpen(false) }}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, lazy, Suspense, Component } from 'react'
+import { useEffect, useState, useMemo, lazy, Suspense, Component } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAtlasStore } from './store/atlasStore'
 import { useNewsData } from './hooks/useNewsData'
@@ -27,11 +27,11 @@ import LandingPage from './components/Landing/LandingPage'
 import WorkspaceDashboard from './components/Workspace/WorkspaceDashboard'
 import WorkspaceTimeline from './components/Workspace/WorkspaceTimeline'
 
-// Lazy-load heavy 3D components — Google Map3D / globe.gl / Leaflet load after landing.
 const GoogleGlobe = lazy(() => import('./components/Globe/GoogleGlobe'))
 const GlobeGLView = lazy(() => import('./components/Globe/GlobeGLView'))
 const FlatMap = lazy(() => import('./components/Globe/FlatMap'))
 const ParticleEarthTransition = lazy(() => import('./components/Transition/ParticleEarthTransition'))
+const EarthHistoryApp = lazy(() => import('./earth-history/EarthHistoryApp'))
 
 class GlobeLoadErrorBoundary extends Component {
   constructor(props) {
@@ -58,8 +58,48 @@ class GlobeLoadErrorBoundary extends Component {
   }
 }
 
+function readPathname() {
+  if (typeof window === 'undefined') return '/'
+  return window.location.pathname.replace(/\/$/, '') || '/'
+}
+
+/**
+ * Top-level router: Earth History is a sibling product shell (no OSINT hooks).
+ */
 export default function App() {
   const [pathTick, setPathTick] = useState(0)
+
+  useEffect(() => {
+    const onHistory = () => setPathTick((t) => t + 1)
+    window.addEventListener('atlas-history', onHistory)
+    window.addEventListener('popstate', onHistory)
+    return () => {
+      window.removeEventListener('atlas-history', onHistory)
+      window.removeEventListener('popstate', onHistory)
+    }
+  }, [])
+
+  const pathname = useMemo(() => readPathname(), [pathTick])
+
+  if (pathname === '/earth-history') {
+    return (
+      <Suspense
+        fallback={
+          <div className="fixed inset-0 z-20 flex items-center justify-center bg-[#050810] text-xs uppercase tracking-widest text-slate-500">
+            Loading Earth History…
+          </div>
+        }
+      >
+        <EarthHistoryApp />
+      </Suspense>
+    )
+  }
+
+  return <AtlasLiveApp />
+}
+
+/** Live ATLAS OSINT experience (landing → globe / workspaces). */
+function AtlasLiveApp() {
   const hasCompletedOnboarding = useAtlasStore((s) => s.hasCompletedOnboarding)
   const landingAcknowledged = useAtlasStore((s) => s.landingAcknowledged)
   const launchTransitionActive = useAtlasStore((s) => s.launchTransitionActive)
@@ -87,7 +127,6 @@ export default function App() {
     if (user && onGlobeView) loadWorkspaces()
   }, [user, onGlobeView, loadWorkspaces])
 
-  // Signed-in users should not sit on the bare globe — route to dashboard unless a workspace is open.
   useEffect(() => {
     if (!onGlobeView || !user) return
     const { appView: view, activeWorkspaceId: wsId } = useAtlasStore.getState()
@@ -102,7 +141,6 @@ export default function App() {
   const mobileMode = useAtlasStore((s) => s.mobileMode)
   const inspectorType = useAtlasStore((s) => s.ui.inspector?.type)
 
-  // Country context-menu panels live in the HUD inspector — reveal HUD if needed.
   useEffect(() => {
     if (
       inspectorType === 'economy' ||
@@ -137,12 +175,6 @@ export default function App() {
   }, [colorblindMode])
 
   useEffect(() => {
-    const onHistory = () => setPathTick((t) => t + 1)
-    window.addEventListener('atlas-history', onHistory)
-    return () => window.removeEventListener('atlas-history', onHistory)
-  }, [])
-
-  useEffect(() => {
     const isMobile = window.innerWidth < 768 || 'ontouchstart' in window
     useAtlasStore.getState().setMobileMode(isMobile)
 
@@ -168,11 +200,6 @@ export default function App() {
     return () => window.removeEventListener('resize', resizeHandler)
   }, [])
 
-  const pathname = useMemo(() => {
-    if (typeof window === 'undefined') return '/'
-    return window.location.pathname.replace(/\/$/, '') || '/'
-  }, [pathTick])
-
   const showLandingLayer = !landingAcknowledged
 
   const { flyToLandmark } = useLandmarkPresets()
@@ -181,14 +208,12 @@ export default function App() {
     if (!onGlobeView) setGlobeReady(false)
   }, [onGlobeView])
 
-  // Safety net: if landing was dismissed but launch never started, enter the globe.
   useEffect(() => {
     if (landingAcknowledged && !hasCompletedOnboarding && !launchTransitionActive) {
       launchWithAllSources()
     }
   }, [landingAcknowledged, hasCompletedOnboarding, launchTransitionActive, launchWithAllSources])
 
-  // Warm data workers as soon as the user enters the app (landing / transition / globe).
   useEffect(() => {
     if (landingAcknowledged || launchTransitionActive || onGlobeView) {
       initEventBusSystem()
@@ -201,8 +226,6 @@ export default function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
 
       if (e.key === 'Escape') {
-        // Close the top-most open layer only: modal → workbench → inspector.
-        // When everything is already closed, restore a hidden HUD.
         const closed = useAtlasStore.getState().closeTopPanel()
         if (!closed) setHudHidden(false)
         return
@@ -232,7 +255,7 @@ export default function App() {
 
         e.preventDefault()
         const currentId = state.selectedEvent?.id
-        const currentIdx = sorted.findIndex(ev => ev.id === currentId)
+        const currentIdx = sorted.findIndex((ev) => ev.id === currentId)
         const nextIdx = e.shiftKey
           ? (currentIdx <= 0 ? sorted.length - 1 : currentIdx - 1)
           : (currentIdx + 1) % sorted.length

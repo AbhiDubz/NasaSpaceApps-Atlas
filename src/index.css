@@ -695,7 +695,7 @@ gmp-map-3d {
 /* Softer, rounder feel: tight inner halos (approximates smoother terminals on a raster/flat SVG) */
 .stitch-landing .atlas-wordmark--landing.atlas-wordmark-img--glow {
   filter:
-    drop-shadow(0 0 1.35px rgba(248, 250, 252, 0.82)) drop-shadow(0 0 2.5px rgba(248, 250, 252, 0.55)) drop-shadow(0 0 1px rgba(255, 255, 255, 0.38)) drop-shadow(0 0 16px rgba(186, 230, 253, 0.52)) drop-shadow(0 0 40px rgba(56, 189, 248, 0.26));
+    drop-shadow(0 0 1.35px rgba(248, 250, 252, 0.82)) drop-shadow(0 0 2.5px rgba(248, 250, 252, 0.5)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.75));
 }
 
 .stitch-footer .atlas-wordmark--landing-footer {
@@ -706,9 +706,28 @@ gmp-map-3d {
   transform-origin: center center;
 }
 
+/*
+ * atlas-logo.svg carries 16.3% horizontal and ~35% vertical transparent
+ * padding. In the footer the mark sits against a text column, so size from the
+ * letterforms (--mark-ink) and pull the dead margin back off every edge —
+ * otherwise the mark reads inset and undersized next to the tagline.
+ */
+.atlas-footer .atlas-wordmark--landing-footer {
+  --mark-ink: clamp(15px, 1.4vw, 18px);
+  --mark-box: calc(var(--mark-ink) / 0.2982);
+  height: var(--mark-box) !important;
+  max-height: none;
+  max-width: none;
+  transform: scaleX(1.07);
+  transform-origin: left center;
+  margin-left: calc(var(--mark-box) * -0.3116);
+  margin-top: calc(var(--mark-box) * -0.3643);
+  margin-bottom: calc(var(--mark-box) * -0.3375);
+}
+
 .stitch-footer .atlas-wordmark--landing-footer.atlas-wordmark-img--glow {
   filter:
-    drop-shadow(0 0 1px rgba(248, 250, 252, 0.72)) drop-shadow(0 0 2px rgba(248, 250, 252, 0.45)) drop-shadow(0 0 12px rgba(186, 230, 253, 0.42)) drop-shadow(0 0 30px rgba(56, 189, 248, 0.18));
+    drop-shadow(0 0 1px rgba(248, 250, 252, 0.72)) drop-shadow(0 0 2px rgba(248, 250, 252, 0.42)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.7));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -716,6 +735,12 @@ gmp-map-3d {
   .stitch-landing .atlas-wordmark--landing,
   .stitch-footer .atlas-wordmark--landing-footer {
     transform: none;
+  }
+
+  /* Unstretched, so the optical inset loses its 1.07 factor. */
+  .atlas-footer .atlas-wordmark--landing-footer {
+    transform: none;
+    margin-left: calc(var(--mark-box) * -0.2912);
   }
 }
 
@@ -4196,8 +4221,37 @@ button.atlas-logo-header-btn:focus-visible {
 /* Fallback base + starfield asset (globe.gl skysphere + immersive loading fallback) */
 .landing-page.stitch-landing {
   --stitch-landing-starfield: url('https://cdn.jsdelivr.net/npm/three-globe/example/img/night-sky.png');
-  background-color: #020408;
-  scroll-behavior: smooth;
+
+  /* Landing surface tokens — DESIGN.md committed values. Scoped here because the
+     app shell still runs the legacy --accent (#00cfff); the marketing surface is
+     the one held to the ice accent. */
+
+  /* DESIGN.md: Source Sans 3 for UI — the global token resolves to Inter, which
+     is never loaded, so it silently falls back to system-ui. Re-scoped here
+     rather than mutating the app-wide token (same approach as earth-history). */
+  --font-ui: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+
+  --landing-bg: #020408;
+  --landing-text: #f1f5f9;
+  --landing-text-soft: rgba(226, 232, 240, 0.93);
+  --landing-muted: #8b9bb0;
+  --landing-accent: #6a9fb2;
+  --landing-accent-soft: rgba(106, 159, 178, 0.55);
+  --landing-accent-dim: rgba(106, 159, 178, 0.12);
+  --landing-line: rgba(255, 255, 255, 0.08);
+  --landing-line-strong: rgba(255, 255, 255, 0.16);
+  --landing-surface: rgba(6, 10, 20, 0.55);
+  --landing-radius: 4px;
+  /* Smallest comfortable pointer target (WCAG 2.5.5) */
+  --landing-target: 44px;
+
+  background-color: var(--landing-bg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-page.stitch-landing {
+    scroll-behavior: smooth;
+  }
 }
 
 /* Stitch-style marketing landing â€” responsive shell (375 / 768 / 1024 / 1280+ targets) */
@@ -4275,7 +4329,7 @@ button.atlas-logo-header-btn:focus-visible {
   position: relative;
   isolation: isolate;
   padding: var(--stitch-nav-pill-pad-y) var(--stitch-nav-pill-pad-x);
-  border-radius: 999px;
+  border-radius: var(--landing-radius);
   border: 1px solid transparent;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0);
   transition:
@@ -4370,17 +4424,73 @@ button.atlas-logo-header-btn:focus-visible {
   }
 }
 
-.stitch-nav-bar__links--mobile {
+/* â”€â”€ Mobile disclosure â€” keeps the first viewport to logo + one action â”€â”€ */
+.stitch-nav-menu-toggle {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: var(--landing-target);
+  height: var(--landing-target);
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(203, 213, 225, 0.9);
+  cursor: pointer;
+}
+
+.stitch-nav-menu-toggle__bar {
+  display: block;
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+.stitch-nav-menu-toggle.is-open .stitch-nav-menu-toggle__bar:first-child {
+  transform: translateY(3px) rotate(45deg);
+}
+
+.stitch-nav-menu-toggle.is-open .stitch-nav-menu-toggle__bar:last-child {
+  transform: translateY(-3px) rotate(-45deg);
+}
+
+.stitch-nav-menu-toggle:focus-visible {
+  outline: 2px solid var(--landing-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.stitch-nav-sheet {
   grid-column: 1 / -1;
   grid-row: 2;
-  padding-top: 0.125rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--landing-line);
+  margin-top: 0.5rem;
+}
+
+.stitch-nav-sheet[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stitch-nav-menu-toggle__bar {
+    transition: none;
+  }
 }
 
 @media (min-width: 768px) {
-  .stitch-nav-bar__links--mobile {
+
+  .stitch-nav-menu-toggle,
+  .stitch-nav-sheet {
     display: none;
   }
 }
+
 
 .stitch-nav-bar__actions {
   grid-column: 3;
@@ -4392,6 +4502,9 @@ button.atlas-logo-header-btn:focus-visible {
 
 /* â”€â”€ Nav Login text link â€” subtle, reference-style â”€â”€ */
 .stitch-nav-login-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--landing-target);
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 500;
@@ -4399,7 +4512,7 @@ button.atlas-logo-header-btn:focus-visible {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 0 0.35rem;
   letter-spacing: 0.01em;
   transition: color 0.2s ease;
 }
@@ -4408,100 +4521,153 @@ button.atlas-logo-header-btn:focus-visible {
   color: #f3f4f6;
 }
 
-/* â”€â”€ Dark pill button â€” used in nav ("Try Free") and hero ("Get Started") â”€â”€ */
-.stitch-btn-dark-pill {
+/* Login collapses into the disclosure sheet on small screens. Declared after the
+   base rule so it wins the cascade on equal specificity. */
+.stitch-nav-login-link--desktop {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .stitch-nav-login-link--desktop {
+    display: inline-flex;
+  }
+}
+
+/* â”€â”€ Primary CTA â€” quiet filled rect, hairline border, no glow hover â”€â”€ */
+.atlas-cta {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  min-height: var(--landing-target);
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #f1f5f9;
-  background: rgba(17, 19, 24, 0.45);
+  color: var(--landing-text);
+  background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
+  border: 1px solid var(--landing-line-strong);
+  border-radius: var(--landing-radius);
   padding: 10px 24px;
   cursor: pointer;
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.35),
-    0 0 0 0 rgba(56, 189, 248, 0);
+  text-decoration: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
   transition:
     background 0.22s ease,
     border-color 0.22s ease,
-    box-shadow 0.3s ease,
-    transform 0.15s ease;
+    box-shadow 0.3s ease;
 }
 
-.stitch-btn-dark-pill:hover {
-  background: rgba(26, 30, 39, 0.55);
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow:
-    0 4px 20px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(56, 189, 248, 0.12);
+.atlas-cta:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.24);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
 }
 
-.stitch-btn-dark-pill:active {
-  transform: scale(0.97);
+/* Secondary weight â€” nav sign-up sits below the hero CTA in the hierarchy */
+.atlas-cta--nav {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--landing-line);
 }
 
-/* Hero variant â€” larger, more commanding */
-.stitch-btn-dark-pill--hero {
+.atlas-cta--nav:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Hero variant â€” the single loudest control on the page */
+.atlas-cta--hero {
   font-size: 15px;
   padding: 16px 38px;
   gap: 0.65rem;
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.45),
-    0 0 0 0 rgba(56, 189, 248, 0);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
 }
 
-.stitch-btn-dark-pill--hero:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  box-shadow:
-    0 6px 32px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(56, 189, 248, 0.18);
-  transform: translateY(-1px);
+.atlas-cta--hero:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.5);
 }
 
-.stitch-btn-dark-pill--hero:active {
-  transform: translateY(0) scale(0.98);
-}
-
-.stitch-btn-dark-pill__text {
+.atlas-cta__text {
   line-height: 1;
 }
 
-.stitch-btn-dark-pill__arrow {
+.atlas-cta__arrow {
   font-size: 16px;
   line-height: 1;
   color: rgba(203, 213, 225, 0.7);
   transition: transform 0.25s ease, color 0.25s ease;
 }
 
-.stitch-btn-dark-pill--hero .stitch-btn-dark-pill__arrow {
+.atlas-cta--hero .atlas-cta__arrow {
   font-size: 18px;
 }
 
-.stitch-btn-dark-pill:hover .stitch-btn-dark-pill__arrow {
+.atlas-cta:hover .atlas-cta__arrow {
   transform: translateX(3px);
   color: rgba(226, 232, 240, 0.95);
 }
 
-/* â”€â”€ Hero CTA row â€” side by side layout â”€â”€ */
+@media (prefers-reduced-motion: reduce) {
+
+  .atlas-cta,
+  .atlas-cta__arrow {
+    transition: none;
+  }
+
+  .atlas-cta:hover .atlas-cta__arrow {
+    transform: none;
+  }
+}
+
+/*
+ * Hero stack rhythm (Persuade):
+ *   lede  = title + body   → tight (one reading unit)
+ *   actions = CTA + note   → tight (one decision unit)
+ *   lede → actions         → generous (priority step)
+ * Scroll cue sits outside the copy stack as page chrome.
+ */
+.stitch-hero__lede {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 40rem;
+}
+
+.stitch-hero__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .stitch-hero__cta-row {
   display: flex;
   align-items: center;
-  gap: clamp(1.25rem, 3vw, 2rem);
-  flex-wrap: wrap;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.stitch-hero-note {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: rgba(203, 213, 225, 0.72);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 /* â”€â”€ "See What You Get" text link in hero â”€â”€ */
 .stitch-hero-see-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--landing-target);
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 500;
@@ -4509,25 +4675,13 @@ button.atlas-logo-header-btn:focus-visible {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 0 0.35rem;
   letter-spacing: 0.01em;
   transition: color 0.2s ease;
 }
 
 .stitch-hero-see-link:hover {
   color: rgba(226, 232, 240, 0.95);
-}
-
-/* Small variant â€” footer-sized pills */
-.stitch-btn-dark-pill--sm {
-  font-size: 11px;
-  padding: 8px 18px;
-  gap: 0.4rem;
-  text-decoration: none;
-}
-
-.stitch-btn-dark-pill--sm .stitch-btn-dark-pill__arrow {
-  font-size: 13px;
 }
 
 @media (min-width: 1536px) {
@@ -4555,6 +4709,9 @@ button.atlas-logo-header-btn:focus-visible {
 }
 
 .stitch-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--landing-target);
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 500;
@@ -4562,7 +4719,7 @@ button.atlas-logo-header-btn:focus-visible {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 0 0.35rem;
   letter-spacing: 0.01em;
   transition: color 0.2s ease;
 }
@@ -4578,7 +4735,7 @@ button.atlas-logo-header-btn:focus-visible {
 }
 
 .stitch-nav-link--active {
-  color: rgba(125, 211, 252, 0.9);
+  color: var(--landing-accent);
 }
 
 /* â”€â”€ Immersive / Explore mode â€” hide all content, fullscreen globe â”€â”€ */
@@ -4601,87 +4758,111 @@ button.atlas-logo-header-btn:focus-visible {
   transition: opacity 0.4s ease;
 }
 
+@media (prefers-reduced-motion: reduce) {
+
+  .stitch-landing__content,
+  .landing-page__glow,
+  .landing--immersive .stitch-landing__content,
+  .landing--immersive .landing-page__glow {
+    transition: none;
+  }
+}
+
 .stitch-nav-link:focus-visible,
 .stitch-nav-logo:focus-visible,
-.stitch-btn-primary:focus-visible,
-.stitch-btn-secondary:focus-visible,
-.stitch-footer-link:focus-visible,
-.stitch-footer button:focus-visible,
-.stitch-use-cases__tab:focus-visible,
-.stitch-hero-scroll-cue:focus-visible,
-.stitch-feature-card__more:focus-visible {
-  outline: 2px solid currentColor;
+.stitch-nav-login-link:focus-visible,
+.stitch-hero-see-link:focus-visible,
+.atlas-cta:focus-visible,
+.stitch-nav-sheet .stitch-nav-link:focus-visible,
+.stitch-hero-scroll-cue:focus-visible {
+  outline: 2px solid var(--landing-accent);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* â”€â”€ Landing hero â€” redesigned: globe-first, copy bottom-anchored â”€â”€ */
 
-.stitch-eyebrow {
-  font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.45em;
-  text-transform: uppercase;
-  color: rgba(125, 211, 252, 0.7);
-}
-
 .stitch-hero-title {
+  margin: 0;
   font-family: var(--font-ui);
-  font-weight: 700;
-  color: #f8fafc;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
+  font-weight: 600;
+  color: var(--landing-text);
+  letter-spacing: -0.02em;
+  line-height: 1.12;
   font-size: clamp(1.75rem, 1rem + 3.5vw, 3.25rem);
+  text-wrap: balance;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 .stitch-hero-body {
+  margin: 0;
   font-family: var(--font-ui);
-  font-size: clamp(0.8rem, 0.6rem + 0.85vw, 0.95rem);
-  color: rgba(156, 163, 175, 0.85);
-  letter-spacing: 0.02em;
-  line-height: 1.7;
+  font-size: clamp(0.875rem, 0.7rem + 0.55vw, 1.0625rem);
+  color: var(--landing-muted);
+  letter-spacing: 0.01em;
+  line-height: 1.55;
   max-width: 34rem;
+  text-wrap: pretty;
 }
 
 .stitch-hero {
-  padding-block: var(--stitch-pad-y-hero) clamp(1.5rem, 4vh, 3rem);
+  padding-block: var(--stitch-pad-y-hero) clamp(1rem, 3vh, 2rem);
 }
 
 .stitch-hero__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
   max-width: 52rem;
   margin-inline: auto;
+  /* Generous step from reading unit → decision unit */
+  gap: clamp(1.75rem, 3.5vh, 2.5rem);
 }
 
-/* Hero copy over photorealistic globe: soft radial scrim + type shadows (layout unchanged) */
-.stitch-hero--fold .stitch-hero__copy {
+/* â”€â”€ Readability scrim â”€â”€
+ * Type that sits over the globe needs a floor to read against. The ellipse must
+ * terminate inside its own box (radii <= 50% measured from the centre) — anything
+ * larger is clipped by the box edge and the scrim stops being invisible: it reads
+ * as a lit plate floating over the earth. Boxes are sized generously instead, so
+ * the falloff completes in empty space.
+ */
+.stitch-hero--fold .stitch-hero__copy,
+.atlas-why .atlas-why__header,
+.atlas-features .atlas-why__header,
+.atlas-capability-list,
+.atlas-final-cta .atlas-final-cta__inner {
   position: relative;
   isolation: isolate;
 }
 
-.stitch-hero--fold .stitch-hero__copy::before {
+.stitch-hero--fold .stitch-hero__copy::before,
+.atlas-why .atlas-why__header::before,
+.atlas-features .atlas-why__header::before,
+.atlas-capability-list::before,
+.atlas-final-cta .atlas-final-cta__inner::before {
   content: '';
   position: absolute;
   z-index: -1;
   left: 50%;
   translate: -50% 0;
-  width: min(100vw - 1.5rem, 52rem);
-  top: -1rem;
-  bottom: -3.25rem;
-  border-radius: 2rem;
+  width: min(100vw + 4rem, var(--scrim-w, 60rem));
+  top: var(--scrim-top, -5rem);
+  bottom: var(--scrim-bottom, -5rem);
   pointer-events: none;
   background: radial-gradient(
-    ellipse 82% 78% at 50% 36%,
-    rgba(2, 6, 14, 0.58) 0%,
-    rgba(2, 6, 14, 0.32) 48%,
-    rgba(2, 6, 14, 0.08) 72%,
+    ellipse 50% 50% at 50% 50%,
+    rgba(2, 6, 14, 0.66) 0%,
+    rgba(2, 6, 14, 0.5) 42%,
+    rgba(2, 6, 14, 0.2) 70%,
     rgba(2, 6, 14, 0) 100%
   );
 }
 
-.stitch-hero--fold .stitch-eyebrow {
-  color: rgba(191, 219, 254, 0.95);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88);
+.stitch-hero--fold .stitch-hero__copy {
+  --scrim-w: 68rem;
+  --scrim-top: -7rem;
+  --scrim-bottom: -7rem;
 }
 
 .stitch-hero--fold .stitch-hero-title {
@@ -4712,82 +4893,31 @@ button.atlas-logo-header-btn:focus-visible {
 
 .stitch-hero__scroll-wrap {
   flex-shrink: 0;
-}
-
-/* â”€â”€ Ghost CTA â€” space-age outline button â”€â”€ */
-.stitch-btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.75rem 2rem;
-  border: 1px solid rgba(148, 200, 255, 0.28);
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.025);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  cursor: pointer;
-  transition:
-    border-color 0.25s ease,
-    background 0.25s ease,
-    box-shadow 0.35s ease,
-    transform 0.18s ease;
-  box-shadow: 0 0 0 transparent;
-}
-
-.stitch-btn-ghost:hover {
-  border-color: rgba(56, 189, 248, 0.65);
-  background: rgba(56, 189, 248, 0.06);
-  box-shadow:
-    0 0 28px rgba(56, 189, 248, 0.18),
-    inset 0 0 12px rgba(56, 189, 248, 0.05);
-  transform: translateY(-1px);
-}
-
-.stitch-btn-ghost:active {
-  transform: translateY(0) scale(0.99);
-}
-
-.stitch-btn-ghost__text {
-  font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.9);
-  transition: color 0.25s ease;
-}
-
-.stitch-btn-ghost:hover .stitch-btn-ghost__text {
-  color: rgba(186, 230, 253, 0.98);
-}
-
-.stitch-btn-ghost__arrow {
-  font-size: 14px;
-  color: rgba(125, 211, 252, 0.5);
-  transition: color 0.25s ease, transform 0.25s ease;
-  line-height: 1;
-}
-
-.stitch-btn-ghost:hover .stitch-btn-ghost__arrow {
-  color: rgba(125, 211, 252, 0.95);
-  transform: translateX(3px);
+  display: flex;
+  justify-content: center;
+  /* Quiet chrome — closer than the lede→actions step, clear of the note */
+  padding-top: clamp(1.25rem, 3vh, 2rem);
+  padding-bottom: 0.75rem;
 }
 
 .stitch-hero-scroll-cue {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.35rem;
+  min-height: var(--landing-target);
+  min-width: var(--landing-target);
   padding: 0.5rem 0.75rem;
   border: none;
   background: transparent;
-  color: rgba(147, 197, 253, 0.55);
+  color: rgba(203, 213, 225, 0.6);
   cursor: pointer;
   transition: color 0.2s ease;
 }
 
 .stitch-hero-scroll-cue:hover {
-  color: rgba(186, 230, 253, 0.85);
+  color: rgba(226, 232, 240, 0.9);
 }
 
 .stitch-hero-scroll-cue__line {
@@ -4795,7 +4925,7 @@ button.atlas-logo-header-btn:focus-visible {
   width: 1px;
   height: 1.5rem;
   border-radius: 1px;
-  background: linear-gradient(180deg, transparent, rgba(56, 189, 248, 0.55), transparent);
+  background: linear-gradient(180deg, transparent, var(--landing-accent-soft), transparent);
   background-size: 100% 200%;
 }
 
@@ -4837,39 +4967,11 @@ button.atlas-logo-header-btn:focus-visible {
   }
 }
 
-.stitch-btn-primary--hero {
-  border: 1px solid transparent;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.25s ease,
-    border-color 0.25s ease;
-}
-
-.stitch-btn-primary--hero:hover {
-  transform: scale(1.03);
-  border-color: rgba(56, 189, 248, 0.55);
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.45),
-    0 12px 28px rgba(0, 0, 0, 0.38);
-}
-
-.stitch-btn-primary--hero:active {
-  transform: scale(0.99);
-}
-
 @media (prefers-reduced-motion: reduce) {
 
   .stitch-hero-scroll-cue__line,
   .stitch-hero-scroll-cue__chev {
     animation: none;
-  }
-
-  .stitch-btn-primary--hero:hover {
-    transform: none;
-  }
-
-  .stitch-btn-primary--hero:active {
-    transform: none;
   }
 }
 
@@ -4934,10 +5036,11 @@ button.atlas-logo-header-btn:focus-visible {
 .atlas-section-title {
   font-family: var(--font-ui);
   font-size: clamp(1.55rem, 1rem + 3vw, 2.75rem);
-  font-weight: 700;
-  color: #f1f5f9;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  color: var(--landing-text);
+  letter-spacing: -0.02em;
   line-height: 1.15;
+  text-wrap: balance;
 }
 
 .atlas-section-title--sm {
@@ -4947,7 +5050,7 @@ button.atlas-logo-header-btn:focus-visible {
 .atlas-section-body {
   font-family: var(--font-ui);
   font-size: clamp(0.85rem, 0.65rem + 0.9vw, 1rem);
-  color: rgba(156, 163, 175, 0.85);
+  color: var(--landing-muted);
   line-height: 1.75;
   max-width: 38rem;
   letter-spacing: 0.01em;
@@ -4969,35 +5072,10 @@ button.atlas-logo-header-btn:focus-visible {
   margin-bottom: 3.5rem;
 }
 
-/* "The Problem" header over globe â€” same treatment as hero fold (layout unchanged) */
 .atlas-why .atlas-why__header {
-  position: relative;
-  isolation: isolate;
-}
-
-.atlas-why .atlas-why__header::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  left: 50%;
-  translate: -50% 0;
-  width: min(100vw - 1.5rem, 44rem);
-  top: -0.75rem;
-  bottom: -1.25rem;
-  border-radius: 2rem;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 82% 78% at 50% 42%,
-    rgba(2, 6, 14, 0.58) 0%,
-    rgba(2, 6, 14, 0.32) 48%,
-    rgba(2, 6, 14, 0.08) 72%,
-    rgba(2, 6, 14, 0) 100%
-  );
-}
-
-.atlas-why .atlas-why__header .stitch-eyebrow {
-  color: rgba(191, 219, 254, 0.95);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88);
+  --scrim-w: 58rem;
+  --scrim-top: -5rem;
+  --scrim-bottom: -4rem;
 }
 
 .atlas-why .atlas-why__header .atlas-section-title {
@@ -5025,16 +5103,22 @@ button.atlas-logo-header-btn:focus-visible {
 
 .atlas-why__card {
   padding: 2rem 2rem 2.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(6, 10, 20, 0.55);
+  border: 1px solid var(--landing-line);
+  background: var(--landing-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border-radius: 4px;
+  border-radius: var(--landing-radius);
   transition: border-color 0.3s ease;
 }
 
 .atlas-why__card:hover {
-  border-color: rgba(56, 189, 248, 0.2);
+  border-color: var(--landing-accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-why__card {
+    transition: none;
+  }
 }
 
 .atlas-why__card-header {
@@ -5044,18 +5128,13 @@ button.atlas-logo-header-btn:focus-visible {
   margin-bottom: 1.5rem;
 }
 
-.atlas-why__icon {
-  font-size: 18px;
-  line-height: 1;
-}
-
+/* Hierarchy by weight and colour, not tracked uppercase */
 .atlas-why__card-label {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: 0.9375rem;
   font-weight: 600;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: rgba(203, 213, 225, 0.7);
+  letter-spacing: -0.01em;
+  color: var(--landing-text);
 }
 
 .atlas-why__list {
@@ -5084,7 +5163,7 @@ button.atlas-logo-header-btn:focus-visible {
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: rgba(56, 189, 248, 0.5);
+  background: var(--landing-accent-soft);
 }
 
 /* â”€â”€ Feature Education â”€â”€ */
@@ -5093,429 +5172,673 @@ button.atlas-logo-header-btn:focus-visible {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* "What You Get" header over globe â€” same readability treatment (layout unchanged) */
 .atlas-features .atlas-why__header {
-  position: relative;
-  isolation: isolate;
-}
-
-.atlas-features .atlas-why__header::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  left: 50%;
-  translate: -50% 0;
-  width: min(100vw - 1.5rem, 44rem);
-  top: -0.75rem;
-  bottom: -1rem;
-  border-radius: 2rem;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 82% 78% at 50% 42%,
-    rgba(2, 6, 14, 0.58) 0%,
-    rgba(2, 6, 14, 0.32) 48%,
-    rgba(2, 6, 14, 0.08) 72%,
-    rgba(2, 6, 14, 0) 100%
-  );
-}
-
-.atlas-features .atlas-why__header .stitch-eyebrow {
-  color: rgba(191, 219, 254, 0.95);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88);
+  --scrim-w: 58rem;
+  --scrim-top: -5rem;
+  --scrim-bottom: -4rem;
 }
 
 .atlas-features .atlas-why__header .atlas-section-title {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.92);
 }
 
-.atlas-features__grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0;
-  max-width: 56rem;
+/* Capability list â€” hairline rows, not a feature-card grid. Proximity and
+   separators carry the structure so the globe keeps the field. */
+.atlas-capability-list {
+  --scrim-w: 66rem;
+  --scrim-top: -5rem;
+  --scrim-bottom: -5rem;
+
+  list-style: none;
+  max-width: 48rem;
   margin-inline: auto;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 4px;
-  overflow: hidden;
+  padding: 0;
 }
 
-@media (min-width: 640px) {
-  .atlas-features__grid {
-    grid-template-columns: 1fr 1fr;
+.atlas-capability__item {
+  display: grid;
+  gap: 0.35rem 2rem;
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--landing-line);
+}
+
+.atlas-capability__item:last-child {
+  border-bottom: 1px solid var(--landing-line);
+}
+
+@media (min-width: 720px) {
+  .atlas-capability__item {
+    grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+    align-items: baseline;
   }
 }
 
-.atlas-feature-card {
-  padding: 2rem 2rem 2.25rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(6, 10, 20, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: background 0.3s ease;
-}
-
-.atlas-feature-card:hover {
-  background: rgba(6, 10, 20, 0.65);
-}
-
-.atlas-feature-card__num {
-  display: block;
-  font-family: var(--font-data);
-  font-size: 10px;
-  letter-spacing: 0.35em;
-  color: rgba(56, 189, 248, 0.5);
-  margin-bottom: 0.85rem;
-}
-
-.atlas-feature-card__title {
+.atlas-capability__title {
   font-family: var(--font-ui);
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text);
-  margin-bottom: 0.6rem;
-  letter-spacing: 0.01em;
+  color: var(--landing-text);
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
-.atlas-feature-card__body {
+.atlas-capability__body {
   font-family: var(--font-ui);
-  font-size: 0.8125rem;
-  color: rgba(148, 163, 184, 0.85);
-  line-height: 1.65;
+  font-size: 0.875rem;
+  color: var(--landing-text-soft);
+  line-height: 1.7;
+  margin: 0;
+  max-width: 42rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
-/* â”€â”€ Final CTA â”€â”€ */
+/* â”€â”€ Final CTA â€”
+ * Same persuasive grammar as the hero, without a support line — so the
+ * title→button step is shorter than the hero's lede→actions gap.
+ */
 .atlas-final-cta {
-  padding-block: clamp(5rem, 12vh, 9rem);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-block: clamp(4.5rem, 11vh, 8rem);
+  border-top: 1px solid var(--landing-line);
   text-align: center;
 }
 
 .atlas-final-cta__inner {
-  max-width: 32rem;
+  --scrim-w: 50rem;
+  --scrim-top: -6rem;
+  --scrim-bottom: -7rem;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1.5rem, 3vh, 2rem);
+  max-width: 36rem;
   margin-inline: auto;
 }
 
-/* Final CTA block over globe â€” same readability treatment (layout unchanged) */
-.atlas-final-cta .atlas-final-cta__inner {
-  position: relative;
-  isolation: isolate;
-}
-
-.atlas-final-cta .atlas-final-cta__inner::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  left: 50%;
-  translate: -50% 0;
-  width: min(100vw - 1.5rem, 36rem);
-  top: -0.75rem;
-  bottom: -2.75rem;
-  border-radius: 2rem;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 85% 80% at 50% 36%,
-    rgba(2, 6, 14, 0.58) 0%,
-    rgba(2, 6, 14, 0.32) 48%,
-    rgba(2, 6, 14, 0.08) 72%,
-    rgba(2, 6, 14, 0) 100%
-  );
-}
-
-.atlas-final-cta .atlas-final-cta__inner .stitch-eyebrow {
-  color: rgba(191, 219, 254, 0.95);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88);
-}
-
-.atlas-final-cta .atlas-final-cta__inner .atlas-section-title {
+.atlas-final-cta__title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: clamp(1.5rem, 0.95rem + 2.4vw, 2.5rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
+  color: var(--landing-text);
+  text-wrap: balance;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.92);
 }
 
-/* â”€â”€ Footer â”€â”€ */
+/* ── Footer ───────────────────────────────────────────────────────────
+ * Continues the earth-led field — a soft neutral fade for type, not a solid
+ * marketing slab that ends the page. Structure matches the capability list:
+ * brand, then hairline action rows, then a quiet bottom bar.
+ */
 .atlas-footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: clamp(2.5rem, 5vh, 4rem);
-  padding-bottom: clamp(2rem, 4vh, 3rem);
+  --footer-fade: clamp(4rem, 12vh, 7rem);
   position: relative;
-  isolation: isolate;
+  padding-top: var(--footer-fade);
+  padding-bottom: clamp(1.5rem, 4vh, 2.5rem);
 }
 
 .atlas-footer::before {
   content: '';
   position: absolute;
-  z-index: -1;
-  left: 50%;
-  translate: -50% 0;
-  width: min(100vw - 1.5rem, 58rem);
-  top: -0.25rem;
-  bottom: -0.25rem;
-  border-radius: 2rem;
+  inset: 0;
+  z-index: 0;
   pointer-events: none;
-  background: radial-gradient(
-    ellipse 92% 75% at 50% 28%,
-    rgba(2, 6, 14, 0.52) 0%,
-    rgba(2, 6, 14, 0.3) 45%,
-    rgba(2, 6, 14, 0.1) 68%,
-    rgba(2, 6, 14, 0) 100%
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgba(2, 6, 14, 0.35) calc(var(--footer-fade) * 0.55),
+    rgba(2, 6, 14, 0.72) var(--footer-fade),
+    rgba(2, 4, 10, 0.88) 100%
   );
 }
 
-.atlas-footer__top {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2.5rem;
-  max-width: 56rem;
+.atlas-footer__inner {
+  position: relative;
+  z-index: 1;
+  max-width: 48rem;
   margin-inline: auto;
-  padding-bottom: 2.5rem;
+  padding-inline: clamp(1.25rem, 4vw, 2rem);
 }
 
-@media (min-width: 640px) {
-  .atlas-footer__top {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (min-width: 1024px) {
-  .atlas-footer__top {
-    grid-template-columns: 1.2fr 1fr 1fr;
-  }
-}
-
-.atlas-footer__brand-col {
+.atlas-footer__brand {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.atlas-footer__tagline-sm {
-  font-family: var(--font-ui);
-  font-size: 12px;
-  color: rgba(148, 163, 184, 0.55);
-  line-height: 1.65;
-  letter-spacing: 0.01em;
-}
-
-.atlas-footer__col {
-  display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: 0.75rem;
+  padding-bottom: clamp(1.75rem, 4vh, 2.5rem);
 }
 
-.atlas-footer__col-label {
+.atlas-footer__mark {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  border-radius: 2px;
+}
+
+.atlas-footer__mark:focus-visible {
+  outline: 2px solid var(--landing-accent);
+  outline-offset: 3px;
+}
+
+.atlas-footer__tagline {
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--landing-muted);
+  max-width: 36rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+.atlas-footer__clock {
+  font-family: var(--font-data);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--landing-muted);
+}
+
+.atlas-footer__clock-time {
+  color: var(--landing-text-soft);
+}
+
+/* Hairline action rows — same grammar as .atlas-capability-list */
+.atlas-footer__actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.atlas-footer__action {
+  display: grid;
+  gap: 1rem;
+  align-items: center;
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--landing-line);
+}
+
+.atlas-footer__action:last-child {
+  border-bottom: 1px solid var(--landing-line);
+}
+
+@media (min-width: 720px) {
+  .atlas-footer__action {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2rem;
+  }
+}
+
+.atlas-footer__action-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.atlas-footer__heading {
+  font-family: var(--font-ui);
+  font-size: 1rem;
   font-weight: 600;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.5);
+  letter-spacing: -0.01em;
+  color: var(--landing-text);
+  margin: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
-.atlas-footer__col-body {
+.atlas-footer__body {
   font-family: var(--font-ui);
-  font-size: 0.8rem;
-  color: rgba(148, 163, 184, 0.75);
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--landing-text-soft);
+  margin: 0;
+  max-width: 42rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
-.atlas-footer__inline-btn {
-  align-self: flex-start;
-  margin-top: 0.25rem;
-}
-
-.atlas-footer__pill-row {
+.atlas-footer__aside {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
+  align-items: center;
+  gap: 0.15rem;
+  margin: 0.35rem 0 0;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--landing-muted);
 }
 
-/* Pill buttons (bug/feature) */
-.atlas-pill-btn {
+.atlas-footer__dot {
+  padding-inline: 0.4rem;
+  color: rgba(139, 155, 176, 0.55);
+}
+
+.atlas-footer__link {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 1rem;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: rgba(203, 213, 225, 0.8);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  text-decoration: none;
+  min-height: var(--landing-target);
+  font: inherit;
+  border: 0;
+  background: none;
+  padding: 0 0.1rem;
   cursor: pointer;
+  color: var(--landing-text-soft);
+  text-decoration: underline;
+  text-decoration-color: rgba(226, 232, 240, 0.28);
+  text-underline-offset: 3px;
+  border-radius: 2px;
   transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease;
+    color 0.18s var(--ease-in-out),
+    text-decoration-color 0.18s var(--ease-in-out);
 }
 
-.atlas-pill-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #f1f5f9;
+.atlas-footer__link:hover {
+  color: var(--landing-text);
+  text-decoration-color: rgba(241, 245, 249, 0.65);
 }
 
-.atlas-pill-btn--accent {
-  color: rgba(125, 211, 252, 0.85);
-  border-color: rgba(56, 189, 248, 0.2);
-  background: rgba(56, 189, 248, 0.04);
-}
-
-.atlas-pill-btn--accent:hover {
-  background: rgba(56, 189, 248, 0.08);
-  border-color: rgba(56, 189, 248, 0.35);
-  color: rgba(186, 230, 253, 0.95);
+.atlas-footer__link:focus-visible {
+  outline: 2px solid var(--landing-accent);
+  outline-offset: 2px;
 }
 
 .atlas-footer__bottom {
-  max-width: 56rem;
-  margin-inline: auto;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-@media (min-width: 640px) {
-  .atlas-footer__bottom {
-    flex-direction: row;
-    justify-content: space-between;
-  }
+  align-items: flex-start;
+  gap: 0.15rem;
+  margin-top: clamp(1.25rem, 3vh, 1.75rem);
+  padding-top: 0.25rem;
 }
 
 .atlas-footer__nav {
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0 clamp(0.35rem, 1.5vw, 1rem);
+}
+
+.atlas-footer__nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--landing-target);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--landing-muted);
+  background: none;
+  border: 0;
+  padding: 0 0.35rem;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 2px;
+  transition: color 0.18s var(--ease-in-out);
+}
+
+.atlas-footer__nav-link:hover {
+  color: var(--landing-text);
+}
+
+.atlas-footer__nav-link:focus-visible {
+  outline: 2px solid var(--landing-accent);
+  outline-offset: 2px;
 }
 
 .atlas-footer__copy {
-  font-family: var(--font-data);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.2);
-}
-
-.atlas-footer .atlas-wordmark--landing-footer {
-  filter:
-    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.82))
-    drop-shadow(0 2px 16px rgba(0, 0, 0, 0.48));
-}
-
-.atlas-footer .atlas-footer__tagline-sm {
-  color: rgba(203, 213, 225, 0.9);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.82);
-}
-
-.atlas-footer .atlas-footer__col-label {
-  color: rgba(196, 211, 232, 0.9);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
-}
-
-.atlas-footer .atlas-footer__col-body {
-  color: rgba(214, 223, 238, 0.93);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.78);
-}
-
-.atlas-footer .atlas-footer__copy {
-  color: rgba(226, 232, 240, 0.42);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
-}
-
-.atlas-footer .stitch-footer-link {
-  color: rgba(203, 213, 225, 0.92);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
-}
-
-.atlas-footer .stitch-footer-link:hover {
-  color: #f8fafc;
-}
-
-.stitch-btn-primary {
   font-family: var(--font-ui);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: capitalize;
-  padding: 14px 32px;
-  border-radius: 999px;
-  border: none;
-  cursor: pointer;
-  color: #f8fafc;
-  background: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.35),
-    0 8px 20px rgba(0, 0, 0, 0.35);
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease;
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+  color: var(--landing-muted);
+  text-align: left;
 }
 
-.stitch-btn-primary:hover {
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.5),
-    0 10px 24px rgba(0, 0, 0, 0.4);
+@media (prefers-reduced-motion: reduce) {
+  .atlas-footer__link,
+  .atlas-footer__nav-link {
+    transition: none;
+  }
 }
 
-.stitch-btn-primary:active {
-  transform: scale(0.98);
-}
-
-.stitch-btn-primary--sm {
-  padding: 12px 26px;
-  font-size: 13px;
-}
-
-/* Header CTA â€” compact pill like reference â€œTry Freeâ€, no surrounding bar */
-.stitch-btn-primary--nav {
-  padding: 10px 22px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: none;
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.3),
-    0 6px 16px rgba(0, 0, 0, 0.25);
-}
-
-.stitch-btn-primary--nav:hover {
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.45),
-    0 8px 20px rgba(0, 0, 0, 0.3);
-}
-
-.stitch-btn-primary--wide {
-  min-width: 200px;
-}
-
-.stitch-btn-secondary {
-  font-family: var(--font-ui);
-  font-size: 14px;
-  font-weight: 600;
-  padding: 14px 32px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.04);
-  color: #e5e7eb;
-  cursor: pointer;
-  text-decoration: none;
+/* Quiet rect controls — used by ContactDialog (landing CTAs use .atlas-cta) */
+.atlas-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--landing-target, 44px);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--landing-radius, 4px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
   transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
+    background-color 0.18s var(--ease-in-out),
+    border-color 0.18s var(--ease-in-out),
+    color 0.18s var(--ease-in-out);
 }
 
-.stitch-btn-secondary:hover {
+.atlas-btn--primary {
+  color: var(--landing-text, #f1f5f9);
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: var(--landing-line-strong, rgba(255, 255, 255, 0.16));
 }
 
+.atlas-btn--primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.atlas-btn--ghost {
+  color: var(--landing-text-soft, rgba(226, 232, 240, 0.93));
+  background: transparent;
+  border-color: var(--landing-line, rgba(255, 255, 255, 0.08));
+}
+
+.atlas-btn--ghost:hover:not(:disabled) {
+  color: var(--landing-text, #f1f5f9);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--landing-line-strong, rgba(255, 255, 255, 0.16));
+}
+
+.atlas-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.atlas-btn:focus-visible {
+  outline: 2px solid var(--landing-accent, #6a9fb2);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-btn {
+    transition: none;
+  }
+}
+
+/* ── Contact / feedback dialog ───────────────────────────────────────── */
+.atlas-contact-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 3vw, 1.5rem);
+  overflow-y: auto;
+  background: rgba(2, 4, 10, 0.74);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.atlas-contact {
+  width: 100%;
+  max-width: 31rem;
+  margin: auto;
+  background: rgba(8, 12, 21, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 6px;
+  box-shadow:
+    0 28px 64px -16px rgba(0, 0, 0, 0.8),
+    0 2px 8px rgba(0, 0, 0, 0.45);
+  font-family: var(--font-ui);
+}
+
+.atlas-contact__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Auth reuses the contact dialog shell. AuthStep's field styles are scoped under
+   .auth-panel, so the body keeps that class and drops the panel's own chrome. */
+.atlas-auth-dialog {
+  max-width: 25rem;
+}
+
+.atlas-auth-dialog__body.auth-panel {
+  padding: 1.25rem;
+  border: none;
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+.atlas-contact__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: #eef3f9;
+}
+
+.atlas-contact__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: rgba(168, 186, 208, 0.85);
+  cursor: pointer;
+  transition:
+    color 0.18s var(--ease-in-out),
+    background-color 0.18s var(--ease-in-out);
+}
+
+.atlas-contact__close:hover {
+  color: #f1f6fb;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.atlas-contact__form,
+.atlas-contact__done {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.atlas-contact__topics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 4px;
+}
+
+.atlas-contact__topic {
+  padding: 0.5rem 0.25rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(174, 191, 212, 0.9);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    background-color 0.18s var(--ease-in-out),
+    color 0.18s var(--ease-in-out);
+}
+
+.atlas-contact__topic:hover:not(:disabled):not(.is-active) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef3f9;
+}
+
+.atlas-contact__topic.is-active {
+  background: rgba(255, 255, 255, 0.13);
+  color: #f6fafd;
+}
+
+.atlas-contact__topic:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.atlas-contact__hint {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: rgba(179, 194, 213, 0.88);
+}
+
+.atlas-contact__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 520px) {
+  .atlas-contact__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.atlas-contact__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.atlas-contact__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(203, 216, 232, 0.92);
+}
+
+.atlas-contact__optional {
+  font-weight: 400;
+  color: rgba(150, 168, 190, 0.8);
+}
+
+.atlas-contact__input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  color: #eef3f9;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 4px;
+  outline: none;
+  transition:
+    border-color 0.18s var(--ease-in-out),
+    background-color 0.18s var(--ease-in-out),
+    box-shadow 0.18s var(--ease-in-out);
+}
+
+.atlas-contact__input::placeholder {
+  color: rgba(146, 164, 187, 0.85);
+}
+
+.atlas-contact__input:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.atlas-contact__input:focus {
+  border-color: rgba(0, 207, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(0, 207, 255, 0.14);
+}
+
+.atlas-contact__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.atlas-contact__input.is-invalid {
+  border-color: rgba(232, 90, 90, 0.65);
+}
+
+.atlas-contact__textarea {
+  resize: vertical;
+  min-height: 7.5rem;
+  line-height: 1.6;
+}
+
+.atlas-contact__honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.atlas-contact__meta {
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  color: rgba(150, 168, 190, 0.85);
+}
+
+.atlas-contact__status:empty {
+  display: none;
+}
+
+.atlas-contact__error {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #ffc9c9;
+  background: rgba(232, 90, 90, 0.1);
+  border: 1px solid rgba(232, 90, 90, 0.32);
+  border-radius: 4px;
+}
+
+.atlas-contact__submit {
+  align-self: flex-start;
+  min-width: 8rem;
+}
+
+.atlas-contact__done-body {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: rgba(197, 210, 226, 0.9);
+}
+
+/* Keep the address whole when it fits; only break it when it cannot. */
+.atlas-contact__done-email {
+  font-family: var(--font-data);
+  font-size: 0.8125rem;
+  color: #eef3f9;
+  overflow-wrap: anywhere;
+}
+
+.atlas-contact__done-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+.atlas-contact :focus-visible {
+  outline: 2px solid var(--landing-accent, #6a9fb2);
+  outline-offset: 2px;
+}
+
+.atlas-contact__input:focus-visible {
+  outline: none;
+}
+
+
+/* Header CTA â€” compact pill like reference â€œTry Freeâ€, no surrounding bar */
 /* Hero globe */
 .stitch-globe-stage {
   position: relative;
@@ -6104,12 +6427,11 @@ button.atlas-logo-header-btn:focus-visible {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  /* Atmospheric haze + edge vignette so type and cards stay readable over dense stars */
+  /* Neutral edge vignette only — legibility for type over the globe. Earth supplies
+     the atmosphere; a colored bloom here would compete with it. */
   background:
-    radial-gradient(ellipse 100% 58% at 50% -12%, rgba(59, 130, 246, 0.14), transparent 56%),
-    radial-gradient(ellipse 92% 52% at 50% -14%, rgba(0, 195, 255, 0.1), transparent 52%),
     radial-gradient(ellipse 130% 85% at 50% 108%, transparent 35%, rgba(1, 3, 10, 0.72) 100%),
-    linear-gradient(180deg, rgba(1, 3, 10, 0.42) 0%, transparent 20%, transparent 78%, rgba(1, 3, 10, 0.55) 100%);
+    linear-gradient(180deg, rgba(1, 3, 10, 0.45) 0%, transparent 22%, transparent 76%, rgba(1, 3, 10, 0.58) 100%);
 }
 
 .atlas-logo-landing {
@@ -6477,6 +6799,7 @@ button.atlas-logo-header-btn:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .atlas-marker--pin-pulse,
   .atlas-globe-event-pulse,
+  .atlas-globe-dot-pulse,
   .atlas-marker--derived-breathe {
     animation: none;
   }

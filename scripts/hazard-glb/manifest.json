@@ -1,0 +1,21 @@
+{
+  "tool": "atlas hazard-glb (Three.js extrusion/pin pipeline inspired by wangyz1999/3d-emoji-assets-generator)",
+  "graphics": "Twemoji (jdecked/twemoji) CC-BY 4.0",
+  "shape": "pin",
+  "models": [
+    { "modelId": "fire", "unicode": "1f525", "shortname": "fire" },
+    { "modelId": "volcano", "unicode": "1f30b", "shortname": "volcano" },
+    { "modelId": "cyclone", "unicode": "1f300", "shortname": "cyclone" },
+    { "modelId": "tornado", "unicode": "1f32a", "shortname": "tornado" },
+    { "modelId": "ocean", "unicode": "1f30a", "shortname": "ocean" },
+    { "modelId": "cloud_with_rain", "unicode": "1f327", "shortname": "cloud_with_rain" },
+    { "modelId": "fog", "unicode": "1f32b", "shortname": "fog" },
+    { "modelId": "snowflake", "unicode": "2744", "shortname": "snowflake" },
+    { "modelId": "zap", "unicode": "26a1", "shortname": "zap" },
+    { "modelId": "sun", "unicode": "2600", "shortname": "sun" },
+    { "modelId": "thermometer", "unicode": "1f321", "shortname": "thermometer" },
+    { "modelId": "mountain", "unicode": "26f0", "shortname": "mountain" },
+    { "modelId": "collision", "unicode": "1f4a5", "shortname": "collision" },
+    { "modelId": "cloud_with_lightning", "unicode": "26c8", "shortname": "cloud_with_lightning" }
+  ]
+}

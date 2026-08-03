@@ -4,13 +4,13 @@ import { supabase } from '../../services/supabase'
 import { useAtlasStore } from '../../store/atlasStore'
 
 /**
- * Sign-in / register form. Used from the header account menu.
- * @param {{ onSuccess?: (user: object|null) => void, allowGuest?: boolean }} props
+ * Sign-in / register form. Used from the header account menu and landing nav.
+ * @param {{ onSuccess?: (user: object|null) => void, allowGuest?: boolean, initialMode?: 'idle' | 'signin' | 'register' }} props
  */
-export default function AuthStep({ onSuccess, allowGuest = false }) {
+export default function AuthStep({ onSuccess, allowGuest = false, initialMode = 'idle' }) {
   const setUser = useAtlasStore((s) => s.setUser)
 
-  const [mode, setMode] = useState('idle')
+  const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)

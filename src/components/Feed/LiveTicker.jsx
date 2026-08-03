@@ -91,7 +91,6 @@ export default function LiveTicker() {
   const [feedOpen, setFeedOpen] = useState(false)
   const [feedSearch, setFeedSearch] = useState('')
   const [socialOpen, setSocialOpen] = useState(false)
-  const hoverTimer = useRef(null)
   const feedRef = useRef(null)
 
   const tickerItems = useMemo(() => {
@@ -214,23 +213,15 @@ export default function LiveTicker() {
     return `${n} items`
   }, [filteredFeedItems.length, feedItems.length, normalizedQuery])
 
-  const handleDockMouseEnter = useCallback(() => {
-    if (mobileMode) return
-    clearTimeout(hoverTimer.current)
-    hoverTimer.current = setTimeout(() => setFeedOpen(true), 200)
-  }, [mobileMode])
-
-  /** Clears the delayed open timer so a pending hover cannot reopen right after an explicit close. */
   const closeFeed = useCallback(() => {
-    clearTimeout(hoverTimer.current)
-    hoverTimer.current = null
     setFeedOpen(false)
   }, [])
 
-  useEffect(() => () => clearTimeout(hoverTimer.current), [])
+  const toggleFeed = useCallback(() => {
+    setFeedOpen((v) => !v)
+  }, [])
 
-  // Close only via ✕ or pointerdown outside the dock (overlay + ticker). Do not use mouseleave —
-  // it fires spuriously when moving into the search field, scrolling, or crossing subpixel gaps.
+  // Close only via ✕, ticker toggle, or pointerdown outside the dock.
   useEffect(() => {
     if (!feedOpen) return
 
@@ -268,7 +259,6 @@ export default function LiveTicker() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.35, duration: 0.35 }}
       className="fixed bottom-0 left-0 right-0 z-30"
-      onMouseEnter={handleDockMouseEnter}
     >
       <AnimatePresence>
         {feedOpen && (
@@ -347,22 +337,28 @@ export default function LiveTicker() {
 
       {mobileMode && (
         <button
-          onClick={() => {
-            setFeedOpen((v) => {
-              if (v) {
-                clearTimeout(hoverTimer.current)
-                hoverTimer.current = null
-              }
-              return !v
-            })
-          }}
+          type="button"
+          onClick={toggleFeed}
           className="absolute -top-8 left-1/2 -translate-x-1/2 z-10 bg-black/60 border border-white/10 rounded-full px-3 py-1 text-[8px] tracking-[0.2em] text-white/50 uppercase font-mono backdrop-blur-sm"
         >
           {feedOpen ? 'Close Feed' : 'Open Feed'}
         </button>
       )}
 
-      <div className="glass border-t border-white/5 ticker-shell">
+      <div
+        className="glass border-t border-white/5 ticker-shell cursor-pointer"
+        role="button"
+        tabIndex={0}
+        aria-expanded={feedOpen}
+        aria-label={feedOpen ? 'Close ATLAS Feed' : 'Open ATLAS Feed'}
+        onClick={toggleFeed}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            toggleFeed()
+          }
+        }}
+      >
         <div className={`ticker-hover-line ${feedOpen ? 'active' : ''}`} />
         <div
           className="ticker-track"
@@ -371,7 +367,11 @@ export default function LiveTicker() {
           {displayItems.map((item, i) => (
             <button
               key={`${item.id}-${i}`}
-              onClick={() => handleItemClick(item)}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleItemClick(item)
+              }}
               className="flex items-center gap-2 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
             >
               {item.mediaType === 'video' ? (

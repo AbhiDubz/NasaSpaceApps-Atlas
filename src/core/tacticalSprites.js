@@ -1,44 +1,69 @@
-import aircraftSvgRaw from '../../public/vecteezy_icon-of-an-airplane-taking-off_4879681.svg?raw'
+/**
+ * Tactical track sprites — ATLAS marker pack glyphs (npm run icons)
+ * with heading/COG rotation. Brand colors stay local to each track kind.
+ */
+
+import { getMarkerGlyph } from '../assets/markers/glyphCatalog.js'
 
 const spriteCache = new Map()
 
-/** Path from `public/vecteezy_icon-of-an-airplane-taking-off_4879681.svg` (viewBox 1024×1024, nose up). */
-const AIRCRAFT_SVG_PATH_D = (() => {
-  const match = aircraftSvgRaw.match(/\sd="\s*([\s\S]*?)"/)
-  return match ? match[1].replace(/\s+/g, ' ').trim() : ''
-})()
-
-const AIRCRAFT_VIEW = 1024
-
 const AIRCRAFT_COLORS = {
-  civilian: { fill: '#00d4ff', stroke: 'rgba(0, 212, 255, 0.35)' },
-  military: { fill: '#ff6b35', stroke: 'rgba(255, 107, 53, 0.4)' },
-}
-
-function drawAircraftIcon(ctx, size, fill, stroke) {
-  if (!AIRCRAFT_SVG_PATH_D) return
-  const scale = (size * 0.88) / AIRCRAFT_VIEW
-  ctx.scale(scale, scale)
-  ctx.translate(-AIRCRAFT_VIEW / 2, -AIRCRAFT_VIEW / 2)
-  const path = new Path2D(AIRCRAFT_SVG_PATH_D)
-  ctx.fillStyle = fill
-  ctx.fill(path)
-  if (stroke) {
-    ctx.strokeStyle = stroke
-    ctx.lineWidth = 18
-    ctx.stroke(path)
-  }
+  // Cool slate — quiet on satellite imagery; military stays distinct (amber)
+  civilian: { fill: '#a8b4c2', stroke: 'rgba(168, 180, 194, 0.32)' },
+  military: { fill: '#c47a52', stroke: 'rgba(196, 122, 82, 0.35)' },
 }
 
 /**
- * Aircraft marker from Vecteezy SVG, oriented by true track (degrees).
+ * Draw a catalog glyph centered at origin (caller applies translate/rotate).
+ * Lucide plane noses roughly +X; we rotate -90° so 0° track = north.
+ */
+function drawGlyphAtOrigin(ctx, atlasId, size, color, strokeColor) {
+  const glyph = getMarkerGlyph(atlasId)
+  if (!glyph?.paths?.length) return false
+
+  const [, , viewW, viewH] = glyph.viewBox
+  const scale = (size * 0.78) / Math.max(viewW, viewH)
+  ctx.save()
+  ctx.scale(scale, scale)
+  ctx.translate(-viewW / 2, -viewH / 2)
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  for (const d of glyph.paths) {
+    const path = new Path2D(d)
+    if (glyph.mode === 'stroke') {
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2.4
+      ctx.stroke(path)
+      if (strokeColor) {
+        ctx.strokeStyle = strokeColor
+        ctx.lineWidth = 3.2
+        ctx.globalAlpha = 0.45
+        ctx.stroke(path)
+        ctx.globalAlpha = 1
+      }
+    } else {
+      ctx.fillStyle = color
+      ctx.fill(path)
+      if (strokeColor) {
+        ctx.strokeStyle = strokeColor
+        ctx.lineWidth = 1.5
+        ctx.stroke(path)
+      }
+    }
+  }
+  ctx.restore()
+  return true
+}
+
+/**
+ * Aircraft marker from ATLAS plane glyph, oriented by true track (degrees).
  * @param {number} trackDeg — heading in degrees (0 = north)
  * @param {boolean} [military=false]
  * @param {number} [size=24]
  * @returns {string} data URL
  */
 export function aircraftSpriteDataUrl(trackDeg = 0, military = false, size = 24) {
-  const key = `ac-svg-${Math.round(trackDeg)}-${military ? 'm' : 'c'}-${size}`
+  const key = `ac-quiet-${Math.round(trackDeg)}-${military ? 'm' : 'c'}-${size}`
   if (spriteCache.has(key)) return spriteCache.get(key)
 
   const canvas = document.createElement('canvas')
@@ -51,8 +76,20 @@ export function aircraftSpriteDataUrl(trackDeg = 0, military = false, size = 24)
 
   ctx.save()
   ctx.translate(cx, cy)
-  ctx.rotate(((trackDeg || 0) * Math.PI) / 180)
-  drawAircraftIcon(ctx, size, palette.fill, palette.stroke)
+  // Lucide plane faces +X; rotate so 0° = north (-Y)
+  ctx.rotate((((trackDeg || 0) - 90) * Math.PI) / 180)
+  const ok = drawGlyphAtOrigin(ctx, 'aircraft', size, palette.fill, palette.stroke)
+  if (!ok) {
+    // Minimal chevron fallback
+    ctx.beginPath()
+    ctx.moveTo(0, -size * 0.4)
+    ctx.lineTo(size * 0.28, size * 0.35)
+    ctx.lineTo(0, size * 0.15)
+    ctx.lineTo(-size * 0.28, size * 0.35)
+    ctx.closePath()
+    ctx.fillStyle = palette.fill
+    ctx.fill()
+  }
   ctx.restore()
 
   const url = canvas.toDataURL('image/png')
@@ -61,13 +98,13 @@ export function aircraftSpriteDataUrl(trackDeg = 0, military = false, size = 24)
 }
 
 /**
- * Small satellite dot sprite.
+ * Small satellite sprite from ATLAS satellite glyph.
  * @param {boolean} [military=false]
- * @param {number} [size=10]
+ * @param {number} [size=14]
  * @returns {string}
  */
-export function satelliteSpriteDataUrl(military = false, size = 10) {
-  const key = `sat-${military ? 'm' : 'c'}-${size}`
+export function satelliteSpriteDataUrl(military = false, size = 14) {
+  const key = `sat-pack-${military ? 'm' : 'c'}-${size}`
   if (spriteCache.has(key)) return spriteCache.get(key)
 
   const canvas = document.createElement('canvas')
@@ -76,28 +113,19 @@ export function satelliteSpriteDataUrl(military = false, size = 10) {
   const ctx = canvas.getContext('2d')
   const cx = size / 2
   const cy = size / 2
-  const r = size * 0.35
+  const color = military ? '#ff6b35' : '#c8ff00'
 
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fillStyle = military ? '#ff6b35' : '#c8ff00'
-  ctx.fill()
-  ctx.strokeStyle = military ? 'rgba(255, 107, 53, 0.6)' : 'rgba(200, 255, 0, 0.5)'
-  ctx.lineWidth = 1
-  ctx.stroke()
-
-  // Crosshair tick marks for satellite
-  ctx.strokeStyle = military ? 'rgba(255, 107, 53, 0.35)' : 'rgba(200, 255, 0, 0.35)'
-  ctx.beginPath()
-  ctx.moveTo(cx - r - 2, cy)
-  ctx.lineTo(cx - r + 1, cy)
-  ctx.moveTo(cx + r - 1, cy)
-  ctx.lineTo(cx + r + 2, cy)
-  ctx.moveTo(cx, cy - r - 2)
-  ctx.lineTo(cx, cy - r + 1)
-  ctx.moveTo(cx, cy + r - 1)
-  ctx.lineTo(cx, cy + r + 2)
-  ctx.stroke()
+  ctx.save()
+  ctx.translate(cx, cy)
+  const ok = drawGlyphAtOrigin(ctx, 'satellite', size, color, null)
+  if (!ok) {
+    const r = size * 0.35
+    ctx.beginPath()
+    ctx.arc(0, 0, r, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+  }
+  ctx.restore()
 
   const url = canvas.toDataURL('image/png')
   spriteCache.set(key, url)
@@ -105,13 +133,13 @@ export function satelliteSpriteDataUrl(military = false, size = 10) {
 }
 
 /**
- * Ship/vessel chevron sprite oriented by course over ground (degrees).
+ * Ship/vessel sprite from ATLAS ship glyph, oriented by course over ground.
  * @param {number} cogDeg — course in degrees (0 = north)
  * @param {number} [size=22]
  * @returns {string} data URL
  */
 export function vesselSpriteDataUrl(cogDeg = 0, size = 22) {
-  const key = `vsl-${Math.round(cogDeg)}-${size}`
+  const key = `vsl-pack-${Math.round(cogDeg)}-${size}`
   if (spriteCache.has(key)) return spriteCache.get(key)
 
   const canvas = document.createElement('canvas')
@@ -120,27 +148,26 @@ export function vesselSpriteDataUrl(cogDeg = 0, size = 22) {
   const ctx = canvas.getContext('2d')
   const cx = size / 2
   const cy = size / 2
-
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate(((cogDeg || 0) * Math.PI) / 180)
-
   const fill = '#4dd4ff'
   const stroke = 'rgba(77, 212, 255, 0.45)'
 
-  // Hull shape — wider than aircraft chevron
-  ctx.beginPath()
-  ctx.moveTo(0, -size * 0.4)
-  ctx.lineTo(size * 0.28, size * 0.35)
-  ctx.lineTo(0, size * 0.22)
-  ctx.lineTo(-size * 0.28, size * 0.35)
-  ctx.closePath()
-  ctx.fillStyle = fill
-  ctx.fill()
-  ctx.strokeStyle = stroke
-  ctx.lineWidth = 1.2
-  ctx.stroke()
-
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate((((cogDeg || 0) - 90) * Math.PI) / 180)
+  const ok = drawGlyphAtOrigin(ctx, 'vessel', size, fill, stroke)
+  if (!ok) {
+    ctx.beginPath()
+    ctx.moveTo(0, -size * 0.4)
+    ctx.lineTo(size * 0.28, size * 0.35)
+    ctx.lineTo(0, size * 0.22)
+    ctx.lineTo(-size * 0.28, size * 0.35)
+    ctx.closePath()
+    ctx.fillStyle = fill
+    ctx.fill()
+    ctx.strokeStyle = stroke
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+  }
   ctx.restore()
 
   const url = canvas.toDataURL('image/png')

@@ -1,12 +1,8 @@
 /**
  * Client-side fetch helpers for Phase 6 stretch features.
+ * Uses same-origin `/api/*` so Vite's atlas-api-dev plugin serves them in
+ * `npm run dev` (no separate vercel/dev:api process required).
  */
-
-const API_BASE = import.meta.env.VITE_ATLAS_API_BASE || ''
-
-function apiUrl(path) {
-  return `${API_BASE}${path}`
-}
 
 /**
  * Search Google Fact Check Tools for claims matching event text.
@@ -16,7 +12,7 @@ function apiUrl(path) {
 export async function fetchFactCheckClaims(query) {
   if (!query?.trim()) return { claims: [] }
   const params = new URLSearchParams({ query: query.trim().slice(0, 200) })
-  const res = await fetch(apiUrl(`/api/fact-check-claims?${params}`))
+  const res = await fetch(`/api/fact-check-claims?${params}`)
   if (!res.ok) throw new Error(`Fact check lookup failed (${res.status})`)
   return res.json()
 }
@@ -34,7 +30,7 @@ export async function fetchSentinel2Scene(lat, lng, days = 30) {
     lng: String(lng),
     days: String(days),
   })
-  const res = await fetch(apiUrl(`/api/sentinel2-scene?${params}`))
+  const res = await fetch(`/api/sentinel2-scene?${params}`)
   if (!res.ok) throw new Error(`Sentinel-2 lookup failed (${res.status})`)
   return res.json()
 }

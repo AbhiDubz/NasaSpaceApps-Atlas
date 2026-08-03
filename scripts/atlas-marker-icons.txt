@@ -1,0 +1,36 @@
+# ATLAS globe marker glyph manifest
+# Format: <atlas_id> <iconify_id>
+# Pull: npm run icons:pull
+# Build: npm run icons:build
+#
+# Scope: hazards + tracks + reference — not per-dimension signal pins.
+# Prefer Lucide (UI parity); use MDI/Tabler when Lucide lacks a hazard glyph.
+
+# ── Environment hazards ──────────────────────────────────────────
+# earthquake uses letter-mark "EQ" (markerGlyphDraw + icon-overrides/earthquake.svg)
+earthquake      lucide:activity
+wildfire        lucide:flame
+hurricane       mdi:weather-hurricane
+duststorm       lucide:cloud-fog
+lightning       lucide:zap
+tornado         lucide:tornado
+# flood uses letter-mark "flood" (markerGlyphDraw + icon-overrides/flood.svg)
+flood           lucide:waves
+avalanche       lucide:mountain-snow
+volcano         lucide:mountain
+tsunami         lucide:waves
+typhoon         mdi:weather-hurricane
+monsoon         lucide:cloud-drizzle
+drought         lucide:sun-dim
+storm           lucide:cloud-rain
+blizzard        lucide:snowflake
+heatwave        lucide:thermometer-sun
+
+# ── Tactical tracks ──────────────────────────────────────────────
+aircraft        lucide:plane
+vessel          lucide:ship
+satellite       lucide:satellite
+
+# ── Reference markers ────────────────────────────────────────────
+nuclear         lucide:radiation
+chokepoint      lucide:anchor

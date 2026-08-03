@@ -11,7 +11,10 @@ import {
   useInspectorWindow,
 } from './InspectorWindowContext'
 
-const TEMP_UNIT_KEY = 'atlas_weather_temp_unit'
+const UNITS_KEY = 'atlas_weather_units'
+const LEGACY_TEMP_UNIT_KEY = 'atlas_weather_temp_unit'
+
+/** @typedef {'metric' | 'imperial'} WeatherUnits */
 
 function formatCoord(n, axis) {
   if (!Number.isFinite(n)) return '—'
@@ -23,13 +26,27 @@ function cToF(c) {
   return (c * 9) / 5 + 32
 }
 
-function readStoredTempUnit() {
+function kmhToMph(kmh) {
+  return kmh * 0.621371
+}
+
+function mmToIn(mm) {
+  return mm / 25.4
+}
+
+/** @returns {WeatherUnits} */
+function readStoredUnits() {
   try {
-    const v = localStorage.getItem(TEMP_UNIT_KEY)
-    return v === 'f' ? 'f' : 'c'
+    const v = localStorage.getItem(UNITS_KEY)
+    if (v === 'imperial' || v === 'metric') return v
+    // Migrate prior °C/°F-only preference
+    const legacy = localStorage.getItem(LEGACY_TEMP_UNIT_KEY)
+    if (legacy === 'f') return 'imperial'
+    if (legacy === 'c') return 'metric'
   } catch {
-    return 'c'
+    /* ignore */
   }
+  return 'metric'
 }
 
 function Stat({ label, value, unit }) {
@@ -44,25 +61,30 @@ function Stat({ label, value, unit }) {
   )
 }
 
-function TempUnitToggle({ unit, onChange }) {
+function UnitsToggle({ units, onChange }) {
   return (
     <div
       className="inline-flex shrink-0 rounded-md border border-line bg-surface p-0.5"
       role="group"
-      aria-label="Temperature unit"
+      aria-label="Measurement units"
       onPointerDown={(e) => e.stopPropagation()}
     >
       {[
-        { id: 'c', label: '°C' },
-        { id: 'f', label: '°F' },
+        { id: 'metric', label: 'Metric' },
+        { id: 'imperial', label: 'US' },
       ].map((opt) => (
         <button
           key={opt.id}
           type="button"
-          aria-pressed={unit === opt.id}
+          aria-pressed={units === opt.id}
+          title={
+            opt.id === 'metric'
+              ? '°C, km/h, mm'
+              : '°F, mph, in'
+          }
           className={cn(
             'cursor-pointer rounded px-2 py-1 font-data text-[10px] font-semibold leading-none transition-colors',
-            unit === opt.id
+            units === opt.id
               ? 'bg-accent-dim text-accent'
               : 'text-muted hover:text-text',
           )}
@@ -83,28 +105,39 @@ export default function WeatherContent({ payload, onClose }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [tempUnit, setTempUnit] = useState(readStoredTempUnit)
+  const [units, setUnits] = useState(readStoredUnits)
+  const imperial = units === 'imperial'
 
   const title = useMemo(
     () => placeDisplayLabel(place, country),
     [place, country?.name],
   )
 
-  const setUnit = (next) => {
-    setTempUnit(next)
+  const setUnitSystem = (next) => {
+    setUnits(next)
     try {
-      localStorage.setItem(TEMP_UNIT_KEY, next)
+      localStorage.setItem(UNITS_KEY, next)
     } catch {
       /* ignore */
     }
   }
 
+  // Open-Meteo returns metric (°C, km/h, mm); convert only for display.
   const formatTemp = (celsius) => {
     if (celsius == null || !Number.isFinite(celsius)) return '—'
-    const value = tempUnit === 'f' ? cToF(celsius) : celsius
-    return value.toFixed(1)
+    return (imperial ? cToF(celsius) : celsius).toFixed(1)
   }
-  const tempSuffix = tempUnit === 'f' ? '°F' : '°C'
+  const formatWind = (kmh) => {
+    if (kmh == null || !Number.isFinite(kmh)) return '—'
+    return (imperial ? kmhToMph(kmh) : kmh).toFixed(0)
+  }
+  const formatPrecip = (mm) => {
+    if (mm == null || !Number.isFinite(mm)) return '—'
+    return (imperial ? mmToIn(mm) : mm).toFixed(imperial ? 2 : 1)
+  }
+  const tempUnit = imperial ? '°F' : '°C'
+  const windUnit = imperial ? 'mph' : 'km/h'
+  const precipUnit = imperial ? 'in' : 'mm'
 
   useEffect(() => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -160,7 +193,7 @@ export default function WeatherContent({ payload, onClose }) {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <TempUnitToggle unit={tempUnit} onChange={setUnit} />
+          <UnitsToggle units={units} onChange={setUnitSystem} />
           <InspectorWindowControls />
         </div>
       </header>
@@ -187,17 +220,17 @@ export default function WeatherContent({ payload, onClose }) {
               <Stat
                 label="Temperature"
                 value={formatTemp(data.temperatureC)}
-                unit={tempSuffix}
+                unit={tempUnit}
               />
               <Stat
                 label="Feels like"
                 value={formatTemp(data.apparentC)}
-                unit={tempSuffix}
+                unit={tempUnit}
               />
               <Stat
                 label="Wind"
-                value={data.windKmh != null ? data.windKmh.toFixed(0) : '—'}
-                unit="km/h"
+                value={formatWind(data.windKmh)}
+                unit={windUnit}
               />
               <Stat
                 label="Humidity"
@@ -206,8 +239,8 @@ export default function WeatherContent({ payload, onClose }) {
               />
               <Stat
                 label="Precipitation"
-                value={data.precipMm != null ? data.precipMm.toFixed(1) : '—'}
-                unit="mm"
+                value={formatPrecip(data.precipMm)}
+                unit={precipUnit}
               />
             </div>
             <p className="px-1 font-data text-[9px] leading-relaxed text-faint">

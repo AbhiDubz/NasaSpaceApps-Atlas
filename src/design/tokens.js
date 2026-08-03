@@ -4,16 +4,16 @@
  * this module exports JS-accessible tokens for components and export UI.
  */
 export const colors = {
-  bg: '#030712',
-  glass: 'rgba(255, 255, 255, 0.04)',
-  glassBorder: 'rgba(255, 255, 255, 0.1)',
-  accent: '#00cfff',
-  text: '#e2e8f0',
-  textMuted: '#94a3b8',
+  bg: '#070b12',
+  glass: 'rgba(255, 255, 255, 0.03)',
+  glassBorder: 'rgba(255, 255, 255, 0.08)',
+  accent: '#6a9fb2',
+  text: '#e6edf5',
+  textMuted: '#8b9bb0',
   priority: {
-    p1: '#ff2222',
-    p2: '#ffaa00',
-    p3: '#1a90ff',
+    p1: '#e85a5a',
+    p2: '#d4a24a',
+    p3: '#5a8fc4',
   },
   dimension: {
     safety: '#E24B4A',
@@ -40,19 +40,19 @@ export const colors = {
 }
 
 export const typography = {
-  data: "'JetBrains Mono', monospace",
-  ui: "'Inter', system-ui, sans-serif",
-  hud: "'JetBrains Mono', monospace",
+  data: "'JetBrains Mono', ui-monospace, monospace",
+  ui: "'Source Sans 3', 'Segoe UI', system-ui, sans-serif",
+  hud: "'JetBrains Mono', ui-monospace, monospace",
   wordmark: "'Bebas Neue', sans-serif",
   reportSerif: "'Georgia', 'Times New Roman', serif",
-  reportMono: "'JetBrains Mono', monospace",
+  reportMono: "'JetBrains Mono', ui-monospace, monospace",
 }
 
 export const spacing = {
   hudPadding: 16,
   panelGap: 12,
-  panelRadius: 10,
-  chipRadius: 999,
+  panelRadius: 4,
+  chipRadius: 4,
 }
 
 export const motion = {

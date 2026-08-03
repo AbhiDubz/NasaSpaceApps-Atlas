@@ -21,7 +21,8 @@ self.addEventListener('fetch', (event) => {
       url.href.includes('earth-day') ||
       url.href.includes('earth-night') ||
       url.href.includes('earth-topology') ||
-      url.href.includes('night-sky')
+      url.href.includes('night-sky') ||
+      url.pathname.includes('/starfield/')
   )) {
     event.respondWith(cacheFirst(event.request, CACHE_NAME_TEXTURES));
     return;

@@ -1,0 +1,12 @@
+ATLAS environment hazard 3D pins
+
+Hazard ↔ emoji mapping follows Twemoji shortnames (jdecked/twemoji).
+Twemoji graphics: CC-BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+Copyright © Twitter, Inc and other contributors
+
+Pipeline inspired by wangyz1999/3d-emoji-assets-generator (MIT)
+https://github.com/wangyz1999/3d-emoji-assets-generator
+GLBs: Three.js pin mesh + GLTFExporter (family accent colors).
+L0 sprites continue to use ATLAS Lucide/Iconify hazard glyphs.
+
+Generated: 2026-07-24T04:39:36.541Z

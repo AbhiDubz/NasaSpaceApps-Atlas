@@ -43,6 +43,11 @@ export const SOURCE_GEO_TIER = {
   promed: 'approximate',
   'ofac-sdn': 'approximate',
   'loc-legal': 'approximate',
+  'federal-register': 'approximate',
+  'whitehouse-briefing': 'approximate',
+  'state-dept': 'approximate',
+  'defense-gov': 'approximate',
+  dvids: 'approximate',
   cloudflare: 'approximate',
   'electricity-maps': 'approximate',
   'noaa-kp': 'approximate',
@@ -95,6 +100,11 @@ const DISPLAY_SOURCE_TO_ID = {
   caltrans: 'cameras',
   'noaa nhc': 'noaa-nhc',
   'celestrak tle': 'celestrak-tle',
+  'federal register': 'federal-register',
+  'the white house': 'whitehouse-briefing',
+  'u.s. department of state': 'state-dept',
+  'defense.gov': 'defense-gov',
+  dvids: 'dvids',
 }
 
 /**

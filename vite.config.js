@@ -7,6 +7,11 @@ import atlasApiDevPlugin from './vite-plugin-atlas-api.js'
 export default defineConfig({
   plugins: [react(), tailwindcss(), cesium(), atlasApiDevPlugin()],
 
+  test: {
+    environment: 'node',
+    include: ['src/**/__tests__/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+  },
+
   // Proxy remaining `/api/*` to `vercel dev` when running (`npm run dev:api`).
   // Tactical-layer proxies (OpenSky, CelesTrak, AISStream) are handled by
   // vite-plugin-atlas-api.js with retries, caching, and server-only keys.

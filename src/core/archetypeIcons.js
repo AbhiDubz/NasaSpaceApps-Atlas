@@ -1,12 +1,13 @@
 /**
  * Canvas icon frames for reference and derived marker archetypes.
- * Composites with inner hazard/dimension art for derived pins.
+ * Reference glyphs come from the ATLAS marker pack (npm run icons).
  */
 import { MARKER_ARCHETYPES } from './markerArchetype.js'
+import { drawMarkerGlyph } from './markerGlyphDraw.js'
 
 const ICON_SIZE = 64
 const HALF = ICON_SIZE / 2
-const CACHE_VERSION = 'marker-v6'
+const CACHE_VERSION = 'marker-v9'
 
 const frameCache = new Map()
 
@@ -33,12 +34,19 @@ export function drawReferenceFrame(ctx, category = 'nuclear') {
   ctx.lineWidth = 2
   ctx.stroke()
 
-  ctx.fillStyle = 'rgba(148, 163, 184, 0.85)'
-  ctx.font = 'bold 22px sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  const glyph = category === 'chokepoint' ? '⚓' : category === 'port' ? '⛴' : '☢'
-  ctx.fillText(glyph, HALF, HALF + 1)
+  const glyphId =
+    category === 'chokepoint' || category === 'port' ? 'chokepoint' : 'nuclear'
+  const drawn = drawMarkerGlyph(ctx, glyphId, HALF, HALF, 12, {
+    color: 'rgba(148, 163, 184, 0.9)',
+    lineWidth: 2.1,
+  })
+  if (!drawn) {
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.85)'
+    ctx.font = 'bold 22px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(category === 'chokepoint' ? '⚓' : '☢', HALF, HALF + 1)
+  }
 }
 
 /**

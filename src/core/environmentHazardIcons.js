@@ -1,34 +1,34 @@
 /**
- * Environment hazard icon drawing — canvas glyphs only.
+ * Environment hazard icon drawing — canvas frames + ATLAS marker SVG glyphs.
  * Classification lives in environmentHazardClassifier.js;
  * cached URLs live in markerIconCache.js.
+ * Glyphs: src/assets/markers/ (npm run icons).
  */
 
 import { HAZARD_TYPES, HAZARD_BORDER_SHAPE as BORDER_SHAPE } from './environmentHazardClassifier.js'
-import wildfireSvgRaw from '../assets/wildfire-icon.svg?raw'
+import { drawMarkerGlyph } from './markerGlyphDraw.js'
 
 export { HAZARD_TYPES } from './environmentHazardClassifier.js'
 export { classifyEnvironmentHazard, resolveHazardType } from './environmentHazardClassifier.js'
 
-function extractSvgPath(svgRaw) {
-  const match = svgRaw.match(/\sd="\s*([\s\S]*?)"/)
-  return match ? match[1].replace(/\s+/g, ' ').trim() : ''
-}
-
-const WILDFIRE_SVG_PATH = extractSvgPath(wildfireSvgRaw)
-const WILDFIRE_VIEW_W = 784
-const WILDFIRE_VIEW_H = 624
-
-function drawSvgPathGlyph(ctx, pathD, viewW, viewH, cx, cy, s, fill = 'rgba(255,255,255,0.95)') {
-  if (!pathD) return
-  const scale = (s * 1.85) / Math.max(viewW, viewH)
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.scale(scale, scale)
-  ctx.translate(-viewW / 2, -viewH / 2)
-  ctx.fillStyle = fill
-  ctx.fill(new Path2D(pathD))
-  ctx.restore()
+/** Hazard type → atlas marker glyph id (manifest role). */
+const HAZARD_GLYPH_ID = {
+  [HAZARD_TYPES.EARTHQUAKE]: 'earthquake',
+  [HAZARD_TYPES.WILDFIRE]: 'wildfire',
+  [HAZARD_TYPES.HURRICANE]: 'hurricane',
+  [HAZARD_TYPES.DUSTSTORM]: 'duststorm',
+  [HAZARD_TYPES.LIGHTNING]: 'lightning',
+  [HAZARD_TYPES.TORNADO]: 'tornado',
+  [HAZARD_TYPES.FLOOD]: 'flood',
+  [HAZARD_TYPES.AVALANCHE]: 'avalanche',
+  [HAZARD_TYPES.VOLCANO]: 'volcano',
+  [HAZARD_TYPES.TSUNAMI]: 'tsunami',
+  [HAZARD_TYPES.TYPHOON]: 'typhoon',
+  [HAZARD_TYPES.MONSOON]: 'monsoon',
+  [HAZARD_TYPES.DROUGHT]: 'drought',
+  [HAZARD_TYPES.STORM]: 'storm',
+  [HAZARD_TYPES.BLIZZARD]: 'blizzard',
+  [HAZARD_TYPES.HEATWAVE]: 'heatwave',
 }
 
 function traceShape(ctx, shape, cx, cy, r) {
@@ -75,217 +75,9 @@ function drawBorderShape(ctx, shape, cx, cy, r, fill, stroke) {
   ctx.stroke()
 }
 
-function strokeGlyph(ctx, draw, lineWidth = 2) {
-  ctx.save()
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)'
-  ctx.lineWidth = lineWidth
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  draw()
-  ctx.restore()
-}
-
-const GLYPHS = {
-  [HAZARD_TYPES.EARTHQUAKE]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx - s, cy)
-      ctx.lineTo(cx - s * 0.35, cy)
-      ctx.lineTo(cx - s * 0.2, cy - s * 0.45)
-      ctx.lineTo(cx, cy + s * 0.35)
-      ctx.lineTo(cx + s * 0.2, cy - s * 0.55)
-      ctx.lineTo(cx + s * 0.35, cy)
-      ctx.lineTo(cx + s, cy)
-      ctx.stroke()
-    })
-  },
-  [HAZARD_TYPES.WILDFIRE]: (ctx, cx, cy, s) => {
-    drawSvgPathGlyph(ctx, WILDFIRE_SVG_PATH, WILDFIRE_VIEW_W, WILDFIRE_VIEW_H, cx, cy, s)
-  },
-  [HAZARD_TYPES.HURRICANE]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.arc(cx, cy, s * 0.15, 0, Math.PI * 2)
-      ctx.stroke()
-      for (let i = 0; i <= 24; i += 1) {
-        const t = i / 24
-        const a = t * Math.PI * 3.2 - Math.PI / 2
-        const rad = s * (0.2 + t * 0.55)
-        const x = cx + rad * Math.cos(a)
-        const y = cy + rad * Math.sin(a)
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      }
-      ctx.stroke()
-    }, 1.7)
-  },
-  [HAZARD_TYPES.TYPHOON]: (ctx, cx, cy, s) => GLYPHS[HAZARD_TYPES.HURRICANE](ctx, cx, cy, s),
-  [HAZARD_TYPES.DUSTSTORM]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      for (let i = -1; i <= 1; i += 1) {
-        ctx.beginPath()
-        ctx.moveTo(cx - s * 0.75, cy + i * s * 0.35)
-        ctx.lineTo(cx + s * 0.75, cy + i * s * 0.35 - s * 0.45)
-        ctx.stroke()
-      }
-    }, 1.8)
-  },
-  [HAZARD_TYPES.LIGHTNING]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx + s * 0.05, cy - s * 0.75)
-      ctx.lineTo(cx - s * 0.25, cy - s * 0.05)
-      ctx.lineTo(cx + s * 0.05, cy - s * 0.05)
-      ctx.lineTo(cx - s * 0.15, cy + s * 0.75)
-      ctx.lineTo(cx + s * 0.35, cy - s * 0.15)
-      ctx.lineTo(cx + s * 0.05, cy - s * 0.15)
-      ctx.closePath()
-      ctx.stroke()
-    }, 1.8)
-  },
-  [HAZARD_TYPES.TORNADO]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.15, cy - s * 0.75)
-      ctx.quadraticCurveTo(cx + s * 0.55, cy - s * 0.15, cx + s * 0.35, cy + s * 0.75)
-      ctx.quadraticCurveTo(cx, cy + s * 0.45, cx - s * 0.35, cy + s * 0.75)
-      ctx.quadraticCurveTo(cx - s * 0.55, cy - s * 0.15, cx - s * 0.15, cy - s * 0.75)
-      ctx.stroke()
-    }, 1.8)
-  },
-  [HAZARD_TYPES.FLOOD]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      for (let i = -1; i <= 1; i += 1) {
-        ctx.beginPath()
-        const y = cy + i * s * 0.35
-        ctx.moveTo(cx - s * 0.75, y)
-        ctx.quadraticCurveTo(cx - s * 0.25, y - s * 0.18, cx, y)
-        ctx.quadraticCurveTo(cx + s * 0.25, y + s * 0.18, cx + s * 0.75, y)
-        ctx.stroke()
-      }
-    }, 1.8)
-  },
-  [HAZARD_TYPES.AVALANCHE]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.75, cy + s * 0.55)
-      ctx.lineTo(cx + s * 0.75, cy - s * 0.55)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.05, cy - s * 0.45)
-      ctx.lineTo(cx + s * 0.15, cy - s * 0.65)
-      ctx.moveTo(cx + s * 0.2, cy - s * 0.25)
-      ctx.lineTo(cx + s * 0.42, cy - s * 0.42)
-      ctx.moveTo(cx + s * 0.35, cy - s * 0.05)
-      ctx.lineTo(cx + s * 0.58, cy - s * 0.18)
-      ctx.stroke()
-    }, 1.7)
-  },
-  [HAZARD_TYPES.VOLCANO]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.75, cy + s * 0.55)
-      ctx.lineTo(cx, cy - s * 0.55)
-      ctx.lineTo(cx + s * 0.75, cy + s * 0.55)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.12, cy - s * 0.62)
-      ctx.lineTo(cx - s * 0.02, cy - s * 0.82)
-      ctx.moveTo(cx + s * 0.02, cy - s * 0.58)
-      ctx.lineTo(cx + s * 0.12, cy - s * 0.78)
-      ctx.moveTo(cx + s * 0.14, cy - s * 0.52)
-      ctx.lineTo(cx + s * 0.24, cy - s * 0.72)
-      ctx.stroke()
-    }, 1.7)
-  },
-  [HAZARD_TYPES.TSUNAMI]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.75, cy + s * 0.35)
-      ctx.quadraticCurveTo(cx - s * 0.2, cy - s * 0.15, cx + s * 0.15, cy + s * 0.05)
-      ctx.quadraticCurveTo(cx + s * 0.45, cy + s * 0.25, cx + s * 0.75, cy - s * 0.35)
-      ctx.stroke()
-    }, 1.8)
-  },
-  [HAZARD_TYPES.MONSOON]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      for (let x = -2; x <= 2; x += 1) {
-        ctx.beginPath()
-        ctx.moveTo(cx + x * s * 0.22, cy - s * 0.65)
-        ctx.lineTo(cx + x * s * 0.22, cy + s * 0.65)
-        ctx.stroke()
-      }
-    }, 1.6)
-  },
-  [HAZARD_TYPES.DROUGHT]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.55, cy - s * 0.35)
-      ctx.lineTo(cx - s * 0.15, cy - s * 0.05)
-      ctx.lineTo(cx - s * 0.35, cy + s * 0.35)
-      ctx.lineTo(cx + s * 0.05, cy + s * 0.05)
-      ctx.lineTo(cx + s * 0.35, cy + s * 0.45)
-      ctx.lineTo(cx + s * 0.55, cy - s * 0.15)
-      ctx.stroke()
-    }, 1.7)
-  },
-  [HAZARD_TYPES.STORM]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.55, cy - s * 0.05)
-      ctx.quadraticCurveTo(cx - s * 0.15, cy - s * 0.55, cx + s * 0.35, cy - s * 0.15)
-      ctx.quadraticCurveTo(cx + s * 0.65, cy + s * 0.05, cx + s * 0.45, cy + s * 0.25)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.25, cy + s * 0.35)
-      ctx.lineTo(cx - s * 0.25, cy + s * 0.65)
-      ctx.moveTo(cx, cy + s * 0.25)
-      ctx.lineTo(cx, cy + s * 0.65)
-      ctx.moveTo(cx + s * 0.25, cy + s * 0.35)
-      ctx.lineTo(cx + s * 0.25, cy + s * 0.65)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(cx + s * 0.42, cy + s * 0.45)
-      ctx.lineTo(cx + s * 0.52, cy + s * 0.65)
-      ctx.lineTo(cx + s * 0.62, cy + s * 0.45)
-      ctx.stroke()
-    }, 1.6)
-  },
-  [HAZARD_TYPES.BLIZZARD]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      for (let i = 0; i < 6; i += 1) {
-        const a = (Math.PI / 3) * i
-        ctx.beginPath()
-        ctx.moveTo(cx - s * 0.65 * Math.cos(a), cy - s * 0.65 * Math.sin(a))
-        ctx.lineTo(cx + s * 0.65 * Math.cos(a), cy + s * 0.65 * Math.sin(a))
-        ctx.stroke()
-      }
-      ctx.beginPath()
-      ctx.moveTo(cx - s * 0.25, cy - s * 0.25)
-      ctx.lineTo(cx + s * 0.25, cy + s * 0.25)
-      ctx.moveTo(cx + s * 0.25, cy - s * 0.25)
-      ctx.lineTo(cx - s * 0.25, cy + s * 0.25)
-      ctx.stroke()
-    }, 1.5)
-  },
-  [HAZARD_TYPES.HEATWAVE]: (ctx, cx, cy, s) => {
-    strokeGlyph(ctx, () => {
-      for (let x = -1; x <= 1; x += 1) {
-        ctx.beginPath()
-        ctx.moveTo(cx + x * s * 0.28, cy + s * 0.65)
-        for (let i = 0; i < 3; i += 1) {
-          const y0 = cy + s * 0.45 - i * s * 0.35
-          ctx.quadraticCurveTo(cx + x * s * 0.28 + s * 0.12, y0 - s * 0.12, cx + x * s * 0.28, y0 - s * 0.25)
-          ctx.quadraticCurveTo(cx + x * s * 0.28 - s * 0.12, y0 - s * 0.38, cx + x * s * 0.28, y0 - s * 0.5)
-        }
-        ctx.stroke()
-      }
-    }, 1.6)
-  },
-}
-
 /**
  * Draw a hazard marker sprite onto a canvas context (64×64 logical space).
+ * Brand frame (shape + fill) stays ATLAS-owned; inner glyph from icon pack.
  * @param {CanvasRenderingContext2D} ctx
  * @param {string} hazardType
  * @param {number} cx
@@ -296,6 +88,17 @@ export function drawHazardMarker(ctx, hazardType, cx, cy, fillColor) {
   const shape = BORDER_SHAPE[hazardType] || 'circle'
   const r = 26
   drawBorderShape(ctx, shape, cx, cy, r, fillColor, 'rgba(255,255,255,0.55)')
-  const drawGlyph = GLYPHS[hazardType] || GLYPHS[HAZARD_TYPES.STORM]
-  drawGlyph(ctx, cx, cy, 14)
+
+  const glyphId = HAZARD_GLYPH_ID[hazardType] || 'storm'
+  const drawn = drawMarkerGlyph(ctx, glyphId, cx, cy, 11, {
+    color: 'rgba(255,255,255,0.95)',
+    lineWidth: 2.1,
+  })
+  if (!drawn) {
+    // Fallback disc so a missing glyph never yields a blank pin
+    ctx.beginPath()
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fill()
+  }
 }

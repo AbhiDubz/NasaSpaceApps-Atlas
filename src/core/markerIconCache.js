@@ -5,23 +5,31 @@
  * Globe renderers read `event.markerIconUrl` only — no runtime sprite generation.
  */
 
-import { DIMENSION_COLORS, DIMENSIONS } from './eventSchema.js'
+import { DIMENSIONS } from './eventSchema.js'
 import {
   classifyEnvironmentHazard,
   eventDimension,
   HAZARD_TYPES,
   HAZARD_TYPE_VALUES,
 } from './environmentHazardClassifier.js'
+import { resolveHazardFill, resolveHazardFillAlpha, resolveSignalFill } from './hazardColors.js'
 import { drawHazardMarker } from './environmentHazardIcons.js'
 import { warmArchetypeIconCache } from './archetypeIcons.js'
 
 const ICON_SIZE = 64
 const HALF = ICON_SIZE / 2
-const CACHE_VERSION = 'marker-v8'
+const CACHE_VERSION = 'marker-v14'
+const SEVERITIES = [1, 2, 3, 4, 5]
 
 const hazardIconUrls = new Map()
 const dimensionIconUrls = new Map()
 let cacheReady = false
+
+function clampSeverity(severity) {
+  const n = Number(severity)
+  if (!Number.isFinite(n)) return 3
+  return Math.min(5, Math.max(1, Math.round(n)))
+}
 
 function renderCanvasToDataUrl(draw, size = ICON_SIZE) {
   const canvas = document.createElement('canvas')
@@ -32,16 +40,18 @@ function renderCanvasToDataUrl(draw, size = ICON_SIZE) {
   return canvas.toDataURL('image/png')
 }
 
-function buildHazardIconUrl(hazardType) {
-  const key = `${CACHE_VERSION}:hazard:${hazardType}`
+function buildHazardIconUrl(hazardType, severity = 3) {
+  const sev = clampSeverity(severity)
+  const type = hazardType || HAZARD_TYPES.STORM
+  const key = `${CACHE_VERSION}:hazard:${type}:s${sev}`
   if (hazardIconUrls.has(key)) return hazardIconUrls.get(key)
 
-  const fill = `${DIMENSION_COLORS[DIMENSIONS.ENVIRONMENT]}cc`
+  const fill = resolveHazardFillAlpha(type, sev)
   const url = renderCanvasToDataUrl((ctx, size) => {
     const scale = size / ICON_SIZE
     ctx.save()
     ctx.scale(scale, scale)
-    drawHazardMarker(ctx, hazardType, HALF, HALF, fill)
+    drawHazardMarker(ctx, type, HALF, HALF, fill)
     ctx.restore()
   })
 
@@ -49,19 +59,20 @@ function buildHazardIconUrl(hazardType) {
   return url
 }
 
-/** Unlabeled signal disc — single accent, no taxonomy glyph. */
-function buildDimensionIconUrl(_dimension) {
-  const key = `${CACHE_VERSION}:dim:signal`
+/** Unlabeled signal disc — muted slate, severity-darkened. */
+function buildDimensionIconUrl(severity = 3) {
+  const sev = clampSeverity(severity)
+  const key = `${CACHE_VERSION}:dim:signal:s${sev}`
   if (dimensionIconUrls.has(key)) return dimensionIconUrls.get(key)
 
-  const color = '#1a90ff'
+  const hex = resolveSignalFill(sev)
   const url = renderCanvasToDataUrl((ctx, size) => {
     const scale = size / ICON_SIZE
     ctx.save()
     ctx.scale(scale, scale)
     ctx.beginPath()
     ctx.arc(HALF, HALF, HALF - 6, 0, Math.PI * 2)
-    ctx.fillStyle = `${color}cc`
+    ctx.fillStyle = `${hex}cc`
     ctx.fill()
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'
     ctx.lineWidth = 2
@@ -73,13 +84,17 @@ function buildDimensionIconUrl(_dimension) {
   return url
 }
 
-/** Pre-generate every hazard + non-environment dimension icon. Call once at startup. */
+/** Pre-generate every hazard×severity + non-environment severity icon. Call once at startup. */
 export function warmMarkerIconCache() {
   if (cacheReady) return
   for (const hazard of HAZARD_TYPE_VALUES) {
-    buildHazardIconUrl(hazard)
+    for (const sev of SEVERITIES) {
+      buildHazardIconUrl(hazard, sev)
+    }
   }
-  buildDimensionIconUrl('signal')
+  for (const sev of SEVERITIES) {
+    buildDimensionIconUrl(sev)
+  }
   warmArchetypeIconCache()
   cacheReady = true
 }
@@ -88,15 +103,15 @@ export function isMarkerIconCacheReady() {
   return cacheReady
 }
 
-export function getHazardMarkerIconUrl(hazardType) {
+export function getHazardMarkerIconUrl(hazardType, severity = 3) {
   warmMarkerIconCache()
-  return buildHazardIconUrl(hazardType || HAZARD_TYPES.STORM)
+  return buildHazardIconUrl(hazardType || HAZARD_TYPES.STORM, severity)
 }
 
 /** Generic unlabeled signal pin — dimension glyphs are not user-facing. */
-export function getDimensionMarkerIconUrl(_dimension) {
+export function getDimensionMarkerIconUrl(severity = 3) {
   warmMarkerIconCache()
-  return buildDimensionIconUrl('narrative')
+  return buildDimensionIconUrl(severity)
 }
 
 /**
@@ -111,16 +126,25 @@ export function enrichEventMarkerVisuals(event) {
   const environmentHazard = dimension === DIMENSIONS.ENVIRONMENT
     ? (event.environmentHazard || classifyEnvironmentHazard(event))
     : null
+  const severity = clampSeverity(event.severity)
 
   const markerIconUrl = dimension === DIMENSIONS.ENVIRONMENT
-    ? getHazardMarkerIconUrl(environmentHazard)
-    : getDimensionMarkerIconUrl('narrative')
+    ? getHazardMarkerIconUrl(environmentHazard, severity)
+    : getDimensionMarkerIconUrl(severity)
 
-  if (event.environmentHazard === environmentHazard && event.markerIconUrl === markerIconUrl) {
+  const color = dimension === DIMENSIONS.ENVIRONMENT
+    ? resolveHazardFill(environmentHazard, severity)
+    : resolveSignalFill(severity)
+
+  if (
+    event.environmentHazard === environmentHazard
+    && event.markerIconUrl === markerIconUrl
+    && event.color === color
+  ) {
     return event
   }
 
-  return { ...event, environmentHazard, markerIconUrl }
+  return { ...event, environmentHazard, markerIconUrl, color }
 }
 
 /** @param {object[]} events */

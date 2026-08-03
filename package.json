@@ -13,7 +13,23 @@
     "build:continents": "node scripts/build-continent-geojson.mjs",
     "build:admin1": "node scripts/build-admin1-geojson.mjs",
     "precompute-coloring": "node scripts/precompute-map-coloring.mjs",
+    "icons:pull": "node scripts/icons-pull.mjs",
+    "icons:build": "node scripts/icons-build.mjs",
+    "icons": "npm run icons:pull && npm run icons:build",
+    "hazards:glb": "node scripts/hazard-glb/generate.mjs",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:earth-history": "vitest run src/earth-history",
+    "earth-history:textures": "node scripts/earth-history/generate-dev-textures.mjs",
+    "earth-history:bake-textures": "node scripts/earth-history/bake-gplates-textures.mjs",
+    "earth-history:bake-paleodem": "node scripts/earth-history/bake-paleodem-textures.mjs",
+    "earth-history:upsample-textures": "node scripts/earth-history/upsample-textures.mjs",
+    "earth-history:bake-coastlines": "node scripts/earth-history/bake-coastlines.mjs",
+    "earth-history:manifest": "node scripts/earth-history/write-manifest.mjs",
+    "earth-history:bake-polities": "node scripts/earth-history/bake-cliopatria-polities.mjs",
+    "earth-history:bake-mosaic": "node scripts/earth-history/bake-polity-mosaic.mjs",
+    "earth-history:bake": "npm run earth-history:bake-textures && npm run earth-history:bake-paleodem && npm run earth-history:bake-coastlines && npm run earth-history:manifest",
+    "earth-history:bake-all": "npm run earth-history:bake && npm run earth-history:bake-polities && npm run earth-history:bake-mosaic",
     "deploy": "npx vercel --prod",
     "deploy:preview": "npx vercel"
   },
@@ -21,10 +37,14 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@iconify/tools": "^5.0.12",
+    "iconify-cli": "^1.3.0",
+    "pngjs": "^7.0.0",
     "shpjs": "^6.2.0",
     "supabase": "^2.106.0",
     "vercel": "^50.0.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^3.2.7"
   },
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",

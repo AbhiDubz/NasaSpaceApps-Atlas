@@ -46,6 +46,15 @@ import { buildGdeltDocQuery } from '../../services/gdelt/analyticsService'
 import useShareCameraBridge from '../../hooks/useShareCameraBridge'
 import { PLACE_SEARCH_PIN_SRC } from '../../constants/placeSearchPin'
 import { buildTerminatorRing } from '../../core/solarTerminator'
+import Model3D from './Model3D'
+import { useHazardModelAnimator } from '../../hooks/useHazardModelAnimator'
+import { preloadHazardModels } from '../../core/hazardModelCatalog'
+import { resolveHazardModelScale, resolveHazardModelAltitudeM } from '../../core/environmentHazardEffects'
+import {
+  resolveHazardVisualLod,
+  selectHazardModelIds,
+  MAX_HAZARD_MODELS,
+} from '../../core/hazardVisualLod'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 
@@ -292,6 +301,7 @@ function InnerMap({ onGlobeReady }) {
     aircraftMarkers,
     vesselMarkers,
     satelliteMarkers,
+    stormMarkers,
     referenceMarkers,
     derivedMarkers,
     correlationArcs,
@@ -301,6 +311,36 @@ function InnerMap({ onGlobeReady }) {
     stormOverlays,
     propagationTick,
   } = useGlobeViewModels({ withClusters: true, withHeatBins: true })
+
+  const reduceMotion =
+    typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  const hazardAnimator = useHazardModelAnimator(!reduceMotion && resolvedTier !== 'low')
+
+  useEffect(() => {
+    preloadHazardModels()
+  }, [])
+
+  const hazardModelIdSet = useMemo(() => {
+    const candidates = [...eventMarkers, ...stormMarkers].filter((vm) => {
+      if (!vm.modelUrl || !vm.hazardEffect) return false
+      return (
+        resolveHazardVisualLod({
+          resolvedTier,
+          cameraRangeM,
+          severity: vm.severity,
+          hasModel: true,
+          reduceMotion,
+        }) === 'model'
+      )
+    })
+    return selectHazardModelIds(candidates, MAX_HAZARD_MODELS)
+  }, [eventMarkers, stormMarkers, resolvedTier, cameraRangeM, reduceMotion])
+
+  const stormVmById = useMemo(() => {
+    const m = new Map()
+    for (const vm of stormMarkers) m.set(vm.id, vm)
+    return m
+  }, [stormMarkers])
 
   /** Raw propagated satellites (orbit arcs need TLE lines + live positions). */
   const tacticalSatellites = useMemo(
@@ -1068,7 +1108,36 @@ function InnerMap({ onGlobeReady }) {
           }
           const pulseClass =
             vm.recency !== 'static' && idx < 20 ? 'atlas-marker--pin-pulse' : ''
+          const hazardClass = vm.hazardEffect?.anim2dClass || ''
           const detLabel = showDetectionLabel(evt, idx)
+          const useModel = hazardModelIdSet.has(vm.id)
+          const profile = vm.hazardEffect
+
+          if (useModel && vm.modelUrl && profile) {
+            const baseScale = resolveHazardModelScale(profile, vm.severity, cameraRangeM)
+            const altitude = resolveHazardModelAltitudeM(profile, cameraRangeM)
+            return (
+              <Model3D
+                key={`m3d-${vm.id}-${vm.environmentHazard || 'evt'}`}
+                src={vm.modelUrl}
+                position={{
+                  lat: vm.lat,
+                  lng: vm.lng,
+                  altitude,
+                }}
+                altitudeMode={AltitudeMode.RELATIVE_TO_GROUND}
+                scale={baseScale}
+                orientation={{ heading: 0, tilt: 0, roll: 0 }}
+                onClick={(e) => onEventClick(e, evt)}
+                animId={vm.id}
+                spinDegPerSec={profile.spinDegPerSec}
+                pulseHz={profile.pulseHz}
+                baseScale={baseScale}
+                animator={hazardAnimator}
+              />
+            )
+          }
+
           return (
             <Marker3D
               key={`${vm.id}-${vm.environmentHazard || 'evt'}`}
@@ -1088,7 +1157,7 @@ function InnerMap({ onGlobeReady }) {
                 width={vm.sizePx}
                 height={vm.sizePx}
                 alt=""
-                className={`atlas-marker--pin ${pulseClass}`}
+                className={`atlas-marker--pin ${pulseClass} ${hazardClass}`.trim()}
                 style={{ opacity: vm.opacity ?? 1 }}
                 onMouseEnter={() => setPointerHover(evt)}
                 onMouseLeave={() => setPointerHover(null)}
@@ -1185,6 +1254,9 @@ function InnerMap({ onGlobeReady }) {
         {stormOverlays.map((storm) => {
           const trackCoords = (storm.trackCoords || []).map((p) => ({ lat: p.lat, lng: p.lng, altitude: 5000 }))
           const coneRing = (storm.coneCoords || []).map((p) => ({ lat: p.lat, lng: p.lng, altitude: 3000 }))
+          const svm = stormVmById.get(storm.id)
+          const profile = svm?.hazardEffect
+          const useModel = svm && hazardModelIdSet.has(svm.id) && svm.modelUrl && profile
           return (
             <React.Fragment key={storm.id}>
               {coneRing.length >= 3 && (
@@ -1204,7 +1276,27 @@ function InnerMap({ onGlobeReady }) {
                   outerWidth={1}
                 />
               )}
-              {storm.lat != null && storm.lng != null && (
+              {storm.lat != null && storm.lng != null && useModel && (
+                <Model3D
+                  key={`storm-m3d-${storm.id}`}
+                  src={svm.modelUrl}
+                  position={{
+                    lat: storm.lat,
+                    lng: storm.lng,
+                    altitude: resolveHazardModelAltitudeM(profile, cameraRangeM),
+                  }}
+                  altitudeMode={AltitudeMode.RELATIVE_TO_GROUND}
+                  scale={resolveHazardModelScale(profile, svm.severity, cameraRangeM)}
+                  orientation={{ heading: 0, tilt: 0, roll: 0 }}
+                  onClick={(e) => onEventClick(e, storm)}
+                  animId={storm.id}
+                  spinDegPerSec={profile.spinDegPerSec}
+                  pulseHz={profile.pulseHz}
+                  baseScale={resolveHazardModelScale(profile, svm.severity, cameraRangeM)}
+                  animator={hazardAnimator}
+                />
+              )}
+              {storm.lat != null && storm.lng != null && !useModel && (
                 <Marker3D
                   position={{ lat: storm.lat, lng: storm.lng, altitude: 8000 }}
                   altitudeMode={AltitudeMode.RELATIVE_TO_GROUND}
@@ -1215,7 +1307,13 @@ function InnerMap({ onGlobeReady }) {
                   zIndex={30}
                   onClick={(e) => onEventClick(e, storm)}
                 >
-                  <img src={storm.markerIconUrl || ''} width={28} height={28} alt="" />
+                  <img
+                    src={svm?.markerIconUrl || storm.markerIconUrl || ''}
+                    width={28}
+                    height={28}
+                    alt=""
+                    className={profile?.anim2dClass || 'atlas-hazard--vortex'}
+                  />
                 </Marker3D>
               )}
             </React.Fragment>

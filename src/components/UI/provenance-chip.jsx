@@ -48,7 +48,7 @@ export function ProvenanceChip({ event, source, timestamp, showTier = true, clas
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-sm border border-line bg-surface px-1.5 py-0.5 font-data text-[10px] leading-normal text-muted whitespace-nowrap',
+        'inline-flex items-center gap-1.5 font-data text-[10px] leading-normal text-muted whitespace-nowrap',
         className,
       )}
     >
