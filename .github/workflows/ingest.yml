@@ -1,0 +1,91 @@
+# Fallback ingest driver — fires when pg_cron/pg_net is unavailable or a
+# silent miss needs a retry. Same /api/ingest contract as the Supabase schedule.
+#
+# Required repository secrets:
+#   ATLAS_INGEST_BASE_URL  — e.g. https://your-app.vercel.app
+#   ATLAS_INGEST_SECRET    — same value as the Vercel INGEST_SECRET env var
+
+name: atlas-ingest
+
+on:
+  schedule:
+    # Every 15 minutes — job matrix decides which sources fire each tick.
+    - cron: '2,17,32,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source id to ingest (or "all")'
+        required: true
+        default: 'all'
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        source:
+          - gdelt-cameo
+          - usgs
+          - gdacs
+          - eonet
+          - firms
+          - noaa-nhc
+          - celestrak-tle
+          - acled
+    steps:
+      - name: Skip if secrets missing or source not requested
+        id: gate
+        env:
+          BASE: ${{ secrets.ATLAS_INGEST_BASE_URL }}
+          SECRET: ${{ secrets.ATLAS_INGEST_SECRET }}
+          MANUAL_SOURCE: ${{ github.event.inputs.source }}
+          MATRIX_SOURCE: ${{ matrix.source }}
+          MINUTE: ${{ github.event.schedule != '' && 'scheduled' || 'manual' }}
+        run: |
+          if [ -z "$BASE" ] || [ -z "$SECRET" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Missing ATLAS_INGEST_BASE_URL / ATLAS_INGEST_SECRET — skipping."
+            exit 0
+          fi
+          if [ -n "$MANUAL_SOURCE" ] && [ "$MANUAL_SOURCE" != "all" ] && [ "$MANUAL_SOURCE" != "$MATRIX_SOURCE" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # On the 15-min schedule, Tier B/C sources only fire at specific minutes.
+          # workflow_dispatch always runs the selected source(s).
+          if [ "$MINUTE" = "scheduled" ]; then
+            min=$(date -u +%M)
+            case "$MATRIX_SOURCE" in
+              gdelt-cameo|usgs|gdacs|eonet) ;; # Tier A — every tick
+              firms|noaa-nhc|celestrak-tle)
+                # Tier B — once an hour (minute 02 of the hour)
+                if [ "$min" != "02" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+                ;;
+              acled)
+                # Tier C — every 6 hours at minute 02
+                hour=$(date -u +%H)
+                if [ "$min" != "02" ] || [ $((10#$hour % 6)) -ne 0 ]; then
+                  echo "run=false" >> "$GITHUB_OUTPUT"; exit 0
+                fi
+                ;;
+            esac
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Ingest ${{ matrix.source }}
+        if: steps.gate.outputs.run == 'true'
+        env:
+          BASE: ${{ secrets.ATLAS_INGEST_BASE_URL }}
+          SECRET: ${{ secrets.ATLAS_INGEST_SECRET }}
+          SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/ingest.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${SECRET}" \
+            -H "Content-Type: application/json" \
+            "${BASE%/}/api/ingest?source=${SOURCE}")
+          cat /tmp/ingest.json
+          echo
+          test "$code" = "200"

@@ -10,7 +10,7 @@ import {
   jsonResponse,
   optionsResponse,
   upstreamFetch,
-} from './_lib/proxyCommon.js'
+} from '../proxyCommon.js'
 
 export const config = { runtime: 'edge' }
 

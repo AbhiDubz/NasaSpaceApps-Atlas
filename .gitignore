@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local one-offs / generated verify output
+scratch/
+screenshots-verify/
+
 # Iconify pull cache (regenerate with npm run icons:pull)
 scripts/.icon-cache/
 # Earth History bake caches (PaleoDEM CSV zip, Cliopatria, …)

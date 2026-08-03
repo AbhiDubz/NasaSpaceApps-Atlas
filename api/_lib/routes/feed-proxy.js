@@ -11,7 +11,7 @@ import {
   optionsResponse,
   textResponse,
   upstreamFetch,
-} from './_lib/proxyCommon.js'
+} from '../proxyCommon.js'
 
 export const config = { runtime: 'edge' }
 
@@ -69,7 +69,7 @@ export default async function handler(req) {
   if (req.method === 'OPTIONS') return optionsResponse()
   if (req.method !== 'GET') return jsonResponse(405, { error: 'method not allowed' })
 
-  const url = new URL(req.url)
+  const url = new URL(req.url, 'https://atlas-osint.vercel.app')
   const id = url.searchParams.get('id') || ''
   const feed = FEEDS[id]
   if (!feed) return jsonResponse(400, { error: 'unknown feed id', allowed: Object.keys(FEEDS) })

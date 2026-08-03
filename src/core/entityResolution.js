@@ -1,10 +1,11 @@
 /**
- * Phase 4 — Entity resolution MVP.
- * Extracts canonical entities from events/investigations and supports graph queries.
+ * Entity resolution — extracts canonical entities from events/investigations,
+ * decides when two labels are the same object, and supports graph queries.
  */
 
 /** @typedef {'place' | 'actor' | 'topic' | 'asset' | 'organization' | 'vessel'} EntityKind */
 /** @typedef {'fact' | 'hypothesis' | 'correlation'} LinkType */
+/** @typedef {'exact' | 'alias' | 'fuzzy' | 'manual' | 'new'} ResolutionMethod */
 
 /**
  * @typedef {object} ResolvedEntity
@@ -46,6 +47,83 @@ export function buildCanonicalId(label, kind) {
     .slice(0, 6)
     .join('-')
   return `${kind}:${stem || 'unnamed'}`
+}
+
+/**
+ * Confidence attached to a resolution, by how it was reached. An exact
+ * canonical-id hit is a fact; a trigram match is a guess, and the score has to
+ * say so or every downstream query treats them alike.
+ * @type {Record<ResolutionMethod, number>}
+ */
+export const RESOLUTION_CONFIDENCE = {
+  manual: 1.0,
+  exact: 1.0,
+  alias: 0.9,
+  fuzzy: 0.7,
+  new: 0.6,
+}
+
+/** Minimum trigram similarity before two labels are treated as one object. */
+export const FUZZY_MATCH_THRESHOLD = 0.62
+
+/**
+ * Kinds where an approximate name match is too risky to accept automatically.
+ * Two earthquakes with near-identical titles are two earthquakes.
+ */
+export const FUZZY_EXEMPT_KINDS = new Set(['event', 'news_item'])
+
+/**
+ * @typedef {object} ResolutionLookups
+ * @property {(canonicalId: string) => Promise<object | null>} byCanonicalId
+ * @property {(label: string, kind: string) => Promise<object | null>} byAlias
+ * @property {(label: string, kind: string, threshold: number) => Promise<object | null>} [byFuzzy]
+ */
+
+/**
+ * @typedef {object} Resolution
+ * @property {object | null} match — the existing row, or null when this is new
+ * @property {ResolutionMethod} method
+ * @property {number} confidence
+ */
+
+/**
+ * Resolve one candidate against existing objects: exact canonical id → alias →
+ * trigram fuzzy → new. Lookups are injected so this stays pure and testable
+ * while the server backs it with Postgres.
+ *
+ * @param {{ canonicalId: string, label: string, kind: string }} candidate
+ * @param {ResolutionLookups} lookups
+ * @param {{ threshold?: number }} [opts]
+ * @returns {Promise<Resolution>}
+ */
+export async function resolveEntity(candidate, lookups, opts = {}) {
+  const threshold = opts.threshold ?? FUZZY_MATCH_THRESHOLD
+
+  const exact = await lookups.byCanonicalId(candidate.canonicalId)
+  if (exact) return finalize(exact, 'exact')
+
+  const alias = await lookups.byAlias(candidate.label, candidate.kind)
+  if (alias) return finalize(alias, 'alias')
+
+  if (lookups.byFuzzy && !FUZZY_EXEMPT_KINDS.has(candidate.kind)) {
+    const fuzzy = await lookups.byFuzzy(candidate.label, candidate.kind, threshold)
+    if (fuzzy) return finalize(fuzzy, 'fuzzy')
+  }
+
+  return { match: null, method: 'new', confidence: RESOLUTION_CONFIDENCE.new }
+}
+
+/**
+ * A row resolved manually stays manual — an automated pass never downgrades a
+ * human decision, however it happened to find the row this time.
+ */
+function finalize(row, method) {
+  const effective = row?.resolution_method === 'manual' ? 'manual' : method
+  return {
+    match: row,
+    method: effective,
+    confidence: RESOLUTION_CONFIDENCE[effective] ?? RESOLUTION_CONFIDENCE.new,
+  }
 }
 
 /**

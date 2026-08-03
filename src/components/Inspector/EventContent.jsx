@@ -10,6 +10,7 @@ import { formatToneScore } from '../../core/eventSchema'
 import CausalThread from '../UI/CausalThread'
 import EventTimeline from '../UI/EventTimeline'
 import StretchSignalsPanel from '../UI/StretchSignalsPanel'
+import ObjectAnnotationPanel from './ObjectAnnotationPanel'
 import { buildGdeltDocQuery } from '../../services/gdelt/analyticsService'
 import { confidenceForEvent } from '../../core/triage'
 import { classifySatellitePurpose } from '../../core/satellitePurpose'
@@ -563,6 +564,9 @@ export default function EventContent({ event, onClose }) {
 
         {/* Phase 6 — Bluesky social reach, fact checks, Sentinel-2 on-demand */}
         <StretchSignalsPanel event={event} />
+
+        {/* Ontology writeback — flag / note / linked objects */}
+        <ObjectAnnotationPanel event={event} />
 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {Array.isArray(event.corroborationSources) && !event.trackKind && (

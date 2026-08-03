@@ -9,7 +9,7 @@ import {
   L2_FEED_SOURCES,
   readFeedSnapshots,
   upsertFeedSnapshot,
-} from './_lib/feedSnapshotStore.js'
+} from '../feedSnapshotStore.js'
 
 export const config = {
   runtime: 'edge',

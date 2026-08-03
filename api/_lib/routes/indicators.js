@@ -7,14 +7,14 @@
  * Upstream calls are hard-capped so Vercel never hits FUNCTION_INVOCATION_TIMEOUT
  * (which leaves the client with World Bank country GDP only).
  */
-import { fetchFredIndicators, fetchFredLocalUnemployment } from '../src/services/indicators/fredAdapter.js'
-import { fetchCensusCountyIndicators } from '../src/services/indicators/censusAdapter.js'
-import { fetchBeaCountyIncome } from '../src/services/indicators/beaAdapter.js'
+import { fetchFredIndicators, fetchFredLocalUnemployment } from '../../../src/services/indicators/fredAdapter.js'
+import { fetchCensusCountyIndicators } from '../../../src/services/indicators/censusAdapter.js'
+import { fetchBeaCountyIncome } from '../../../src/services/indicators/beaAdapter.js'
 import {
   resolveUsGeoFromCoords,
   formatCountyLabel,
   formatMsaLabel,
-} from '../src/services/indicators/usGeoResolve.js'
+} from '../../../src/services/indicators/usGeoResolve.js'
 
 export const config = {
   runtime: 'nodejs',

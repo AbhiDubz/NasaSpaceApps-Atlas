@@ -5,16 +5,22 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "functions": {
+    "api/[...path].js": {
+      "maxDuration": 60
+    },
+    "api/ingest.js": {
+      "maxDuration": 60
+    },
+    "api/seed-ontology.js": {
+      "maxDuration": 60
+    },
     "api/gdelt-query.js": {
-      "memory": 512,
       "maxDuration": 30
     },
     "api/export-report.js": {
-      "memory": 1024,
       "maxDuration": 60
     },
-    "api/indicators.js": {
-      "memory": 512,
+    "api/export-report-status.js": {
       "maxDuration": 30
     }
   },

@@ -6,7 +6,7 @@
  * Query: ?regions=hormuz,suez (optional filter by chokepoint name slug)
  */
 
-import { AIS_CHOKEPOINT_BBOXES, CHOKEPOINTS } from '../src/core/chokepoints.js'
+import { AIS_CHOKEPOINT_BBOXES, CHOKEPOINTS } from '../../../src/core/chokepoints.js'
 
 export const config = {
   maxDuration: 30,

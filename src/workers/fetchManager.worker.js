@@ -1,11 +1,8 @@
-import { fetchGdeltCameoEvents } from '../services/gdelt/eventService.js'
 import { fetchGdeltJson, fetchGdeltText } from '../services/gdelt/gdeltHttp.js'
 import { fetchVgkgImagerySample } from '../services/gdelt/vgkgService.js'
 import { isMilitaryIcao24 } from '../core/militaryIcao.js'
-import { parseTleCatalog } from '../core/satellitePropagation.js'
-import { classifySatellitePurpose } from '../core/satellitePurpose.js'
+import { lookupCountryCentroid } from '../core/countryCodes.js'
 import { PRIORITY_FETCH_SOURCES } from '../core/atlasBootstrap.js'
-import { fetchNhcStormsBundle } from '../core/fetchNhcStorms.js'
 import {
   saveSnapshot,
   loadSnapshots,
@@ -13,7 +10,11 @@ import {
   LIVE_TRACK_SOURCES,
 } from '../core/snapshotCache.js'
 import { getActivePollSourceIds } from '../core/layerSources.js'
-import { acledAdapter, buildAdapterPollConfigs } from '../adapters/index.js'
+import {
+  buildAdapterNormalizers,
+  buildAdapterPollConfigs,
+  getAdapter,
+} from '../adapters/index.js'
 import { classifyEnvironmentHazard } from '../core/environmentHazardClassifier.js'
 import { filterToAtlasCycle } from '../core/atlasCycle.js'
 
@@ -69,6 +70,13 @@ async function fetchText(url) {
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
   return res.text()
 }
+
+/**
+ * Transport context handed to adapters that own their own fetching.
+ * No `baseUrl` in the worker — same-origin `/api/*` paths resolve directly.
+ * @type {import('../adapters/types.js').FetchContext}
+ */
+const workerFetchContext = { fetchJson: fetchJSON, fetchText }
 
 // ── Shared helpers ──
 
@@ -173,67 +181,6 @@ function getXmlTag(xml, tag) {
   return m ? m[1].trim() : ''
 }
 
-const COUNTRY_CENTROIDS = {
-  AF:[33,65],AL:[41,20],DZ:[28,3],AO:[-12.5,18.5],AR:[-34,-64],AM:[40,45],AU:[-27,133],AT:[47.5,13.5],
-  AZ:[40.5,47.5],BD:[24,90],BY:[53,28],BE:[50.8,4],BJ:[9.5,2.3],BO:[-17,-65],BA:[44,18],BR:[-10,-55],
-  BG:[43,25],BF:[13,-1.5],BI:[-3.5,30],KH:[12.5,105],CM:[6,12.5],CA:[60,-95],CF:[7,21],TD:[15,19],
-  CL:[-30,-71],CN:[35,105],CO:[4,-72],CD:[-4,22],CG:[-1,15],CR:[10,-84],CI:[8,-5.5],HR:[45.2,15.5],
-  CU:[22,-80],CZ:[49.8,15.5],DK:[56,10],DJ:[11.5,43],DO:[19,-70.7],EC:[-2,-77.5],EG:[27,30],
-  SV:[13.8,-88.9],ER:[15,39],ET:[8,38],FI:[64,26],FR:[46,2],GA:[-1,11.8],DE:[51,9],GH:[8,-1.2],
-  GR:[39,22],GT:[15.5,-90.3],GN:[11,-10],HT:[19,-72.3],HN:[15,-86.5],HU:[47,20],IN:[20,77],
-  ID:[-5,120],IR:[32,53],IQ:[33,44],IE:[53,-8],IL:[31.5,34.8],IT:[42.8,12.8],JM:[18.1,-77.3],
-  JP:[36,138],JO:[31,36],KZ:[48,68],KE:[-1,38],KP:[40,127],KR:[37,127.5],KW:[29.5,47.8],
-  KG:[41,75],LA:[18,105],LV:[57,25],LB:[33.8,35.8],LR:[6.5,-9.5],LY:[25,17],LT:[56,24],
-  MG:[-20,47],MW:[-13.5,34],MY:[2.5,112.5],ML:[17,-4],MR:[20,-12],MX:[23,-102],MD:[47,29],
-  MN:[46,105],MA:[32,-5],MZ:[-18.3,35],MM:[22,98],NA:[-22,17],NP:[28,84],NL:[52.5,5.8],
-  NZ:[-42,174],NI:[13,-85],NE:[16,8],NG:[10,8],NO:[62,10],OM:[21,57],PK:[30,70],PA:[9,-80],
-  PY:[-23,-58],PE:[-10,-76],PH:[13,122],PL:[52,20],PT:[39.5,-8],QA:[25.5,51.3],RO:[46,25],
-  RU:[60,100],RW:[-2,30],SA:[25,45],SN:[14,-14],RS:[44,21],SL:[8.5,-11.8],SG:[1.4,103.8],
-  SK:[48.7,19.5],SI:[46.1,15],SO:[5.2,46],ZA:[-29,24],ES:[40,-4],LK:[7,81],SD:[15,30],
-  SE:[62,15],CH:[47,8],SY:[35,38],TW:[23.5,121],TJ:[39,71],TZ:[-6,35],TH:[15,100],
-  TG:[8,1.2],TN:[34,9],TR:[39,35],TM:[40,60],UG:[1,32],UA:[49,32],AE:[24,54],
-  GB:[54,-2],US:[38,-97],UY:[-33,-56],UZ:[41,64],VE:[8,-66],VN:[16,106],YE:[15,48],
-  ZM:[-15,30],ZW:[-20,30],
-}
-
-/** Map GDELT ArtList `sourcecountry` (English labels) → ISO2 for centroid lookup. Keys: lowercase, no spaces. */
-const GDELT_COUNTRY_NAME_TO_ISO = {
-  afghanistan: 'AF', albania: 'AL', algeria: 'DZ', angola: 'AO', argentina: 'AR', armenia: 'AM',
-  australia: 'AU', austria: 'AT', azerbaijan: 'AZ', bangladesh: 'BD', belarus: 'BY', belgium: 'BE',
-  benin: 'BJ', bolivia: 'BO', 'bosniaandherzegovina': 'BA', brazil: 'BR', bulgaria: 'BG', 'burkinafaso': 'BF',
-  burundi: 'BI', cambodia: 'KH', cameroon: 'CM', canada: 'CA', 'centralafricanrepublic': 'CF', chad: 'TD',
-  chile: 'CL', china: 'CN', colombia: 'CO', 'democraticrepublicofthecongo': 'CD', congo: 'CG', 'costarica': 'CR',
-  croatia: 'HR', cuba: 'CU', czechia: 'CZ', czechrepublic: 'CZ', denmark: 'DK', djibouti: 'DJ', 'dominicanrepublic': 'DO',
-  ecuador: 'EC', egypt: 'EG', 'elsalvador': 'SV', eritrea: 'ER', ethiopia: 'ET', finland: 'FI', france: 'FR',
-  gabon: 'GA', germany: 'DE', ghana: 'GH', greece: 'GR', guatemala: 'GT', guinea: 'GN', haiti: 'HT', honduras: 'HN',
-  hungary: 'HU', india: 'IN', indonesia: 'ID', iran: 'IR', iraq: 'IQ', ireland: 'IE', israel: 'IL', italy: 'IT',
-  jamaica: 'JM', japan: 'JP', jordan: 'JO', kazakhstan: 'KZ', kenya: 'KE', 'northkorea': 'KP', 'southkorea': 'KR',
-  kuwait: 'KW', kyrgyzstan: 'KG', laos: 'LA', latvia: 'LV', lebanon: 'LB', liberia: 'LR', libya: 'LY', lithuania: 'LT',
-  luxembourg: 'LU', madagascar: 'MG', malawi: 'MW', malaysia: 'MY', mali: 'ML', malta: 'MT', mauritania: 'MR',
-  mexico: 'MX', moldova: 'MD', mongolia: 'MN', montenegro: 'ME', morocco: 'MA', mozambique: 'MZ', myanmar: 'MM',
-  namibia: 'NA', nepal: 'NP', netherlands: 'NL', 'newzealand': 'NZ', nicaragua: 'NI', niger: 'NE', nigeria: 'NG',
-  norway: 'NO', oman: 'OM', pakistan: 'PK', panama: 'PA', paraguay: 'PY', peru: 'PE', philippines: 'PH', poland: 'PL',
-  portugal: 'PT', qatar: 'QA', romania: 'RO', russia: 'RU', rwanda: 'RW', 'saudiarabia': 'SA', senegal: 'SN', serbia: 'RS',
-  'sierraleone': 'SL', singapore: 'SG', slovakia: 'SK', slovenia: 'SI', somalia: 'SO', 'southafrica': 'ZA', spain: 'ES',
-  'srilanka': 'LK', sudan: 'SD', sweden: 'SE', switzerland: 'CH', syria: 'SY', taiwan: 'TW', tajikistan: 'TJ',
-  tanzania: 'TZ', thailand: 'TH', togo: 'TG', tunisia: 'TN', turkey: 'TR', turkmenistan: 'TM', uganda: 'UG', ukraine: 'UA',
-  'unitedarabemirates': 'AE', 'unitedkingdom': 'GB', uk: 'GB', 'greatbritain': 'GB', 'unitedstates': 'US', usa: 'US',
-  uruguay: 'UY', uzbekistan: 'UZ', venezuela: 'VE',   vietnam: 'VN', yemen: 'YE', zambia: 'ZM', zimbabwe: 'ZW',
-}
-
-function normalizeGdeltCountryLabel(label) {
-  return String(label || '').toLowerCase().replace(/[\s._-]+/g, '').trim()
-}
-
-function lookupCentroidFromSourceCountry(sourcecountry) {
-  const key = normalizeGdeltCountryLabel(sourcecountry)
-  if (!key) return null
-  const iso = GDELT_COUNTRY_NAME_TO_ISO[key] || (key.length === 2 ? key.toUpperCase() : null)
-  if (!iso || !COUNTRY_CENTROIDS[iso]) return null
-  const [lat, lng] = COUNTRY_CENTROIDS[iso]
-  return { lat, lng, iso }
-}
-
 /** GDELT DOC `seendate`: YYYYMMDDTHHmmssZ */
 function gdeltSeendateToTimestampMs(seendate) {
   if (!seendate || typeof seendate !== 'string') return Date.now()
@@ -307,143 +254,14 @@ const GDELT_DOC_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc'
 /** Per-leg AbortController timeout for GDELT DOC/GEO chain legs. */
 const GDELT_LEG_TIMEOUT_MS = 20_000
 
-// ── Phase 1b: CAMEO → two products (pins + country aggregates) ──
-
-/** Pin gate: a CAMEO row pins only when multiple independent sources OR high severity. */
-const GDELT_PIN_MIN_SOURCES = 3
-const GDELT_PIN_MIN_SEVERITY = 4
-
-function cameoRowIsPinWorthy(row) {
-  return (row.numSources || 0) >= GDELT_PIN_MIN_SOURCES
-    || (row.severity || 1) >= GDELT_PIN_MIN_SEVERITY
-}
-
-/**
- * Reduce ALL parsed CAMEO rows (not just pin-worthy ones) to per-country
- * aggregates keyed by FIPS 10-4 (`ActionGeo_CountryCode`, which joins
- * directly to Natural Earth `FIPS_10`). Feeds the choropleth without extra
- * GEO API calls, and the Triage surge baseline (Phase 4).
- * @returns {Record<string, { events: number, avgTone: number, avgGoldstein: number, quad: Record<1|2|3|4, number> }>}
- */
-function buildCameoCountryAggregates(rows) {
-  const sums = {}
-  for (const row of rows) {
-    const fips = row.countryCode
-    if (!fips || fips === '-99') continue
-    let s = sums[fips]
-    if (!s) {
-      s = { events: 0, toneSum: 0, goldsteinSum: 0, quad: { 1: 0, 2: 0, 3: 0, 4: 0 } }
-      sums[fips] = s
-    }
-    s.events++
-    if (Number.isFinite(row.toneScore)) s.toneSum += row.toneScore
-    if (Number.isFinite(row.goldstein)) s.goldsteinSum += row.goldstein
-    if (s.quad[row.quadClass] != null) s.quad[row.quadClass]++
-  }
-  const out = {}
-  for (const [fips, s] of Object.entries(sums)) {
-    out[fips] = {
-      events: s.events,
-      avgTone: s.toneSum / s.events,
-      avgGoldstein: s.goldsteinSum / s.events,
-      quad: s.quad,
-    }
-  }
-  return out
-}
-
 // ══════════════════════════════════════════════════════════════
 //  NORMALIZERS — one per source ID
+//
+//  Sources with an entry in `src/adapters/` are not listed here; their
+//  normalizers are merged in below via `buildAdapterNormalizers`.
 // ══════════════════════════════════════════════════════════════
 
-const NORMALIZERS = {
-
-  // ── MODULE 6: Seismic ──
-
-  usgs: (data) => {
-    if (!data?.features) return []
-    return data.features
-      .filter(f => f.geometry?.coordinates && f.properties?.mag)
-      .map(f => {
-        const p = f.properties
-        const [lng, lat] = f.geometry.coordinates
-        const mag = p.mag
-        let severity = 1
-        if (mag >= 7.0) { severity = 5 }
-        else if (mag >= 6.0) { severity = 4 }
-        else if (mag >= 5.5) { severity = 3 }
-        else if (mag >= 5.0) { severity = 2 }
-        return makeEvent({
-          id: createEventId(lat, lng, p.time, 'usgs', p.title || ''),
- dimension: 'environment', lat, lng, severity,
-          corroborationSources: ['usgs'], authoritative: true, ttl: 360,
-          title: p.title || `M${mag} Earthquake`,
-          detail: `Magnitude ${mag} at depth ${f.geometry.coordinates[2] || 0}km. ${p.place || ''}`.trim(),
-          source: 'USGS', sourceUrl: p.url || 'https://earthquake.usgs.gov',
-          tags: ['earthquake', `M${mag.toFixed(1)}`], timestamp: new Date(p.time).toISOString(),
-        })
-      })
-  },
-
-  gdacs: (xmlText) => {
-    if (!xmlText) return []
-    const events = []
-    const itemRegex = /<item>([\s\S]*?)<\/item>/g
-    let match
-    while ((match = itemRegex.exec(xmlText)) !== null) {
-      const item = match[1]
-      const title = getXmlTag(item, 'title')
-      const description = getXmlTag(item, 'description')
-      const link = getXmlTag(item, 'link')
-      const pubDate = getXmlTag(item, 'pubDate')
-
-      const latM = item.match(/<geo:lat>([^<]+)/)
-      const lngM = item.match(/<geo:long>([^<]+)/)
-      if (!latM || !lngM) continue
-      const lat = parseFloat(latM[1]), lng = parseFloat(lngM[1])
-      if (isNaN(lat) || isNaN(lng)) continue
-
-      const alertM = item.match(/<gdacs:alertlevel>([^<]+)/)
-      const alertLevel = alertM ? alertM[1].trim().toLowerCase() : ''
-      let severity = 2
-      if (alertLevel === 'red') { severity = 5 }
-      else if (alertLevel === 'orange') { severity = 3 }
-
-      events.push(makeEvent({
-        id: createEventId(lat, lng, Date.parse(pubDate || Date.now()), 'gdacs', title),
- dimension: 'environment', lat, lng, severity,
-        corroborationSources: ['gdacs'], authoritative: true, ttl: 600,
-        title, detail: description, source: 'GDACS',
-        sourceUrl: link || 'https://www.gdacs.org', tags: ['disaster'],
-        timestamp: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-      }))
-    }
-    return events
-  },
-
-  // ── MODULE 5: Weather & Environment ──
-
-  eonet: (data) => {
-    if (!data?.events) return []
-    return data.events
-      .filter(e => e.geometry?.length > 0)
-      .map(e => {
-        const geo = e.geometry[e.geometry.length - 1]
-        if (!geo.coordinates) return null
-        const [lng, lat] = geo.coordinates
-        const catId = e.categories?.[0]?.id || ''
-        const isSevere = ['volcanoes', 'severeStorms', 'floods', 'landslides'].includes(catId)
-        return makeEvent({
-          id: createEventId(lat, lng, Date.parse(geo.date || Date.now()), 'eonet', e.title),
-          dimension: 'environment', lat, lng, severity: isSevere ? 3 : 1,
-          corroborationSources: ['eonet'], authoritative: true, ttl: 1800,
-          title: e.title || 'Natural Event',
-          detail: `Category: ${catId}. Source: NASA EONET.`,
-          source: 'NASA EONET', sourceUrl: e.link || 'https://eonet.gsfc.nasa.gov',
-          tags: [catId, 'natural-event'], timestamp: geo.date || new Date().toISOString(),
-        })
-      }).filter(Boolean)
-  },
+const INLINE_NORMALIZERS = {
 
   // ── MODULE 10: Space & Electromagnetic ──
 
@@ -636,7 +454,7 @@ const NORMALIZERS = {
     const out = []
     for (const a of data.articles) {
       const url = a.url || ''
-      const centroid = lookupCentroidFromSourceCountry(a.sourcecountry)
+      const centroid = lookupCountryCentroid(a.sourcecountry)
       if (!centroid) continue
       const lat = centroid.lat
       const lng = centroid.lng
@@ -902,46 +720,6 @@ const NORMALIZERS = {
     return events.slice(0, 800)
   },
 
-  // ── Phase 1: CelesTrak TLE catalogs ($0 — no key, reasonable-use polling) ──
-
-  'celestrak-tle': (entries) => {
-    if (!Array.isArray(entries) || entries.length === 0) return []
-    const now = Date.now()
-    return entries.slice(0, 600).map((entry) => {
-      const name = entry.name || 'Satellite'
-      const noradId = entry.noradId ?? 0
-      const group = entry._atlasGroup || 'active'
-      const mil = group === 'military'
-      const purposeInfo = classifySatellitePurpose({ name, satelliteGroup: group, isMilitary: mil })
-      const opSuffix = purposeInfo.operator ? ` · ${purposeInfo.operator}` : ''
-      return makeEvent({
-        id: createEventId(0, 0, 0, 'celestrak-tle', String(noradId)),
-        dimension: 'environment',
-        lat: 0,
-        lng: 0,
-        latApproximate: false,
-        severity: group === 'stations' ? 2 : 1,
-        corroborationSources: ['celestrak-tle'],
-        ttl: 7200,
-        title: name,
-        detail: `${purposeInfo.label}${opSuffix} · NORAD ${noradId} · ${group} catalog`,
-        source: 'CelesTrak TLE',
-        sourceUrl: 'https://celestrak.org',
-        tags: ['space', 'satellite', group, purposeInfo.purpose].filter(Boolean),
-        trackKind: 'satellite',
-        noradId,
-        satelliteGroup: group,
-        isMilitary: mil,
-        satellitePurpose: purposeInfo.purpose,
-        satellitePurposeLabel: purposeInfo.label,
-        satellitePurposeDetail: purposeInfo.detail,
-        satelliteOperator: purposeInfo.operator,
-        tleLine1: entry.line1,
-        tleLine2: entry.line2,
-      })
-    })
-  },
-
   // ── Live cameras (Windy + TfL + Caltrans via /api/cameras) ──
 
   cameras: (data) => {
@@ -1014,40 +792,6 @@ const NORMALIZERS = {
     })
   },
 
-  // ── Phase 3: NOAA NHC active tropical cyclones ($0 RSS/KML, no key) ──
-
-  'noaa-nhc': (data) => {
-    const storms = data?.storms
-    if (!Array.isArray(storms) || storms.length === 0) return []
-    return storms.map((s) => {
-      const track = s.trackCoords || []
-      const cone = s.coneCoords || []
-      const centerLat = s.centerLat ?? track[track.length - 1]?.lat ?? 0
-      const centerLng = s.centerLng ?? track[track.length - 1]?.lng ?? 0
-      const cat = s.category || 'TC'
-      const sev = /hurricane|typhoon/i.test(cat) ? 4 : /storm/i.test(cat) ? 3 : 2
-      return makeEvent({
-        id: createEventId(centerLat, centerLng, Date.now(), 'noaa-nhc', s.stormId || s.name),
-        dimension: 'environment',
-        lat: centerLat,
-        lng: centerLng,
-        severity: sev,
-        corroborationSources: ['noaa-nhc'],
-        ttl: 3600,
-        title: `${s.name || s.stormId} (${cat})`,
-        detail: `NOAA/NHC active cyclone · ${track.length} track points · ${cone.length ? 'cone available' : 'track only'}`,
-        source: 'NOAA NHC',
-        sourceUrl: 'https://www.nhc.noaa.gov',
-        tags: ['weather', 'hurricane', 'nhc', cat.toLowerCase()],
-        trackKind: 'storm',
-        stormId: s.stormId,
-        stormCategory: cat,
-        trackCoords: track,
-        coneCoords: cone,
-      })
-    })
-  },
-
   // ── Open-Meteo (extreme weather for key cities) ──
 
   'open-meteo': (data) => {
@@ -1075,42 +819,6 @@ const NORMALIZERS = {
   // ══════════════════════════════════
   //  PHASE 3: KEYED API NORMALIZERS
   // ══════════════════════════════════
-
-  acled: (data) => acledAdapter.normalize(data, { createEventId, makeEvent }),
-
-  firms: (csvText) => {
-    if (!csvText) return []
-    const lines = csvText.trim().split('\n')
-    if (lines.length < 2) return []
-    const headers = lines[0].split(',')
-    const latIdx = headers.indexOf('latitude')
-    const lngIdx = headers.indexOf('longitude')
-    const confIdx = headers.indexOf('confidence')
-    const frpIdx = headers.indexOf('frp')
-    const dateIdx = headers.indexOf('acq_date')
-    if (latIdx < 0 || lngIdx < 0) return []
-
-    return lines.slice(1, 30).map(line => {
-      const cols = line.split(',')
-      const lat = parseFloat(cols[latIdx]), lng = parseFloat(cols[lngIdx])
-      if (isNaN(lat) || isNaN(lng)) return null
-      const conf = cols[confIdx] || 'nominal'
-      const frp = parseFloat(cols[frpIdx]) || 0
-      let severity = 1
-      if (frp > 100) { severity = 3 }
-      if (conf === 'high' || frp > 500) { severity = 4 }
-      return makeEvent({
-        id: createEventId(lat, lng, Date.now(), 'firms', `fire-${lat.toFixed(2)}-${lng.toFixed(2)}`),
- dimension: 'environment', lat, lng, severity,
-        corroborationSources: ['firms'], authoritative: true, ttl: 600,
-        title: `Active Fire — FRP ${Math.round(frp)} MW`,
-        detail: `Confidence: ${conf}. Fire radiative power: ${frp.toFixed(1)} MW.`,
-        source: 'NASA FIRMS', sourceUrl: 'https://firms.modaps.eosdis.nasa.gov',
-        tags: ['fire', 'wildfire'],
-        timestamp: cols[dateIdx] ? new Date(cols[dateIdx]).toISOString() : new Date().toISOString(),
-      })
-    }).filter(Boolean)
-  },
 
   finnhub: (data) => {
     if (!data) return []
@@ -1328,24 +1036,23 @@ const NORMALIZERS = {
   },
 }
 
+/**
+ * Adapter-backed sources override any inline entry of the same ID, so moving a
+ * source into `src/adapters/` is the single switch that changes behaviour.
+ */
+const NORMALIZERS = {
+  ...INLINE_NORMALIZERS,
+  ...buildAdapterNormalizers({ createEventId, makeEvent }),
+}
+
 // ══════════════════════════════════════════════════════════════
 //  SOURCE CONFIGS — URL + poll interval + format
+//
+//  Adapter-backed sources supply their own config through
+//  `buildAdapterPollConfigs` and are absent from this map.
 // ══════════════════════════════════════════════════════════════
 
 const SOURCE_CONFIGS = {
-  usgs: {
-    url: 'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=4.5&orderby=time&limit=50',
-    format: 'json', pollInterval: 120_000,
-  },
-  // GDACS serves no CORS headers — fetched via same-origin proxy
-  gdacs: {
-    url: '/api/gdacs-rss',
-    format: 'text', pollInterval: 300_000,
-  },
-  eonet: {
-    url: 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=3',
-    format: 'json', pollInterval: 600_000,
-  },
   'noaa-kp': {
     url: '/api/feed-proxy?id=noaa-kp',
     format: 'json', pollInterval: 300_000,
@@ -1368,12 +1075,6 @@ const SOURCE_CONFIGS = {
   // 404 as of 2026-05-21 (re-tested in Phase 0). Leaving the source active
   // burns the shared rate-limit budget with failing legs. Re-enable once GDELT
   // restores the GEO endpoint.
-  'gdelt-cameo': {
-    // GDELT publishes a new 15-minute `.export.CSV.zip` every quarter hour;
-    // poll on that cadence so the globe always mirrors the latest firehose.
-    format: 'json',
-    pollInterval: 900_000,
-  },
   'gdelt-vgkg': {
     format: 'json',
     pollInterval: 1_800_000,
@@ -1426,12 +1127,6 @@ const SOURCE_CONFIGS = {
     format: 'json',
     pollInterval: 3_600_000,
   },
-  // Phase 1 — CelesTrak TLE catalogs (multi-group fetch in fetchSource)
-  'celestrak-tle': {
-    format: 'text',
-    pollInterval: 3_600_000,
-    tleGroups: ['active', 'stations', 'starlink', 'gps-ops', 'military'],
-  },
   // Phase 3 — AISStream.io ships via server WebSocket proxy ($0, registration only)
   aisstream: {
     url: '/api/aisstream-ships',
@@ -1443,12 +1138,6 @@ const SOURCE_CONFIGS = {
     url: '/api/cameras',
     format: 'json',
     pollInterval: 300_000,
-  },
-  // Phase 3 — NOAA NHC active storm tracks + cone-of-error ($0, no key — worker fetches direct)
-  'noaa-nhc': {
-    format: 'json',
-    pollInterval: 300_000,
-    directFetch: true,
   },
   // Phase 6 — Bluesky Jetstream social reach ($0, no key — server WS proxy ~8s collect)
   bluesky: {
@@ -1466,14 +1155,6 @@ const SOURCE_CONFIGS = {
 
 function buildKeyedConfigs() {
   const keyed = buildAdapterPollConfigs(envKeys)
-
-  const firmsKey = envKeys.FIRMS_MAP_KEY || envKeys.FIRMS_KEY
-  if (firmsKey) {
-    keyed.firms = {
-      url: `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${firmsKey}/VIIRS_SNPP_NRT/world/1`,
-      format: 'text', pollInterval: 600_000,
-    }
-  }
 
   if (envKeys.FINNHUB_KEY) {
     keyed.finnhub = {
@@ -1709,7 +1390,7 @@ async function fetchSource(sourceId) {
       const events = []
       const seen = new Set()
       for (const row of rows) {
-        const centroid = lookupCentroidFromSourceCountry(row.countryIso || '')
+        const centroid = lookupCountryCentroid(row.countryIso || '')
         if (!centroid) continue
         const key = row.id || row.pageUrl || row.imageUrl
         if (!key || seen.has(key)) continue
@@ -1762,129 +1443,27 @@ async function fetchSource(sourceId) {
     }
   }
 
-  if (sourceId === 'gdelt-cameo') {
+  // Adapters declaring `fetchRaw` own their transport (multi-leg fetches,
+  // archive downloads). One path covers all of them.
+  const customAdapter = config.custom ? getAdapter(sourceId) : null
+  if (customAdapter?.fetchRaw) {
     try {
-      const rows = await fetchGdeltCameoEvents()
+      const raw = await customAdapter.fetchRaw(config, workerFetchContext)
 
-      // Product 1 — country aggregates from the FULL row set (choropleth +
-      // surge baselines). Posted as a dedicated message, not globe events.
-      const aggregates = buildCameoCountryAggregates(rows)
-      state.lastAggregates = aggregates
-      state.lastTotalRows = rows.length
-      if (Object.keys(aggregates).length > 0) {
+      const side = customAdapter.aggregate?.(raw)
+      if (side?.aggregates) {
+        state.lastAggregates = side.aggregates
+        state.lastTotalRows = side.totalRows || 0
         self.postMessage({
           type: 'GDELT_COUNTRY_AGGREGATES',
-          aggregates,
-          exportTsMs: rows[0]?._exportTsMs ?? Date.now(),
-          totalRows: rows.length,
+          aggregates: side.aggregates,
+          exportTsMs: side.exportTsMs ?? Date.now(),
+          totalRows: side.totalRows || 0,
         })
       }
 
-      // Product 2 — pins: only high-confidence rows (multi-source OR severe).
-      const events = rows.filter(cameoRowIsPinWorthy).map((row) => {
-        const ts = typeof row._exportTsMs === 'number' && Number.isFinite(row._exportTsMs)
-          ? row._exportTsMs
-          : Date.now()
-        const sev = Math.min(5, Math.max(1, row.severity || 1))
-        sev >= 4 ? 'p1' : sev >= 2 ? 'p2' : 'p3'
-        return makeEvent({
-          id: createEventId(row.lat, row.lng, ts, 'gdelt-cameo', row.title),
-          dimension: row.dimension,
-          lat: row.lat,
-          lng: row.lng,
-          latApproximate: row.latApproximate === true,
-          severity: sev,
-          corroborationCount: row.corroborationCount || 1,
-          corroborationSources: ['gdelt-cameo'],
-          title: row.title,
-          detail: `${row.detail} SQLDATE: ${row.sqlDate || '—'}. Mentions: ${row.numMentions}. Actors: ${[row.actor1, row.actor2].filter(Boolean).join(' → ') || 'n/a'}.`,
-          source: 'GDELT',
-          sourceUrl: row.sourceUrl || 'https://www.gdeltproject.org',
-          tags: ['gdelt', 'cameo', `cameo${row.cameoRoot || ''}`, typeof row.quadClass === 'number' ? `qc${row.quadClass}` : ''].filter(Boolean),
-          toneScore: row.toneScore,
-          actor1: row.actor1,
-          actor2: row.actor2,
-          locationName: row.locationName,
-          timestamp: new Date(ts).toISOString(),
-          // Keep CAMEO pins alive for 2 hours — matches the "Live" HUD window
-          // (`TIME_FILTER_MAX_AGE_MS.live`). Applies to the reduced
-          // high-confidence pin set (≈100-300/tick) across 8 consecutive
-          // 15-minute polls; older rows are culled by TTL here or by the
-          // globe's own age filter.
-          ttl: 7200,
-        })
-      })
-      state.backoff = INITIAL_BACKOFF
-      state.errorCount = 0
-      state.lastFetch = Date.now()
-      return events
-    } catch (err) {
-      state.errorCount++
-      state.backoff = Math.min(state.backoff * 2, MAX_BACKOFF)
-      self.postMessage({
-        type: 'SOURCE_ERROR',
-        sourceId,
-        error: err.message,
-        nextRetry: state.backoff,
-      })
-      return []
-    }
-  }
-
-  if (sourceId === 'noaa-nhc') {
-    try {
-      const storms = await fetchNhcStormsBundle()
-      const events = NORMALIZERS['noaa-nhc']({ storms })
-      state.backoff = INITIAL_BACKOFF
-      state.errorCount = 0
-      state.lastError = null
-      state.lastFetch = Date.now()
-      return events
-    } catch (err) {
-      state.errorCount++
-      state.lastError = err.message
-      state.backoff = Math.min(state.backoff * 2, MAX_BACKOFF)
-      self.postMessage({
-        type: 'SOURCE_ERROR',
-        sourceId,
-        error: err.message,
-        nextRetry: state.backoff,
-      })
-      return []
-    }
-  }
-
-  if (sourceId === 'celestrak-tle') {
-    try {
-      const groups = config.tleGroups || ['active']
-      const merged = []
-      const seen = new Set()
-      const groupErrors = []
-      for (const group of groups) {
-        try {
-          const url = `/api/celestrak-tle?group=${encodeURIComponent(group)}`
-          const text = await fetchText(url)
-          const parsed = parseTleCatalog(text)
-          for (const entry of parsed) {
-            const id = entry.noradId
-            if (!id || seen.has(id)) continue
-            seen.add(id)
-            merged.push({ ...entry, _atlasGroup: group })
-          }
-        } catch (err) {
-          groupErrors.push(`${group}: ${err.message || err}`)
-        }
-        await new Promise((r) => setTimeout(r, 600))
-      }
-      if (!merged.length) {
-        throw new Error(groupErrors.join(' · ') || 'All CelesTrak TLE groups failed')
-      }
-      if (groupErrors.length) {
-        state.lastWarning = groupErrors.join(' · ')
-      } else {
-        state.lastWarning = null
-      }
-      const events = NORMALIZERS['celestrak-tle'](merged)
+      const events = customAdapter.normalize(raw, { createEventId, makeEvent })
+      state.lastWarning = raw?._warning || null
       state.backoff = INITIAL_BACKOFF
       state.errorCount = 0
       state.lastError = null

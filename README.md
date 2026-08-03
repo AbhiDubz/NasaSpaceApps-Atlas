@@ -1,6 +1,24 @@
 # ATLAS — Global Intelligence
 
-Vite + React intel globe. See `.env.example` for API keys (copy to `.env` locally).
+Vite + React intel globe. This `atlas/` folder is the app root.
+
+See `.env.example` for API keys (copy to `.env` locally). Product and engineering notes live in [`docs/`](./docs/).
+
+## Quick start
+
+```bash
+cd atlas
+npm install
+npm run dev
+```
+
+For GDELT-backed local features, also run the API proxy in a second terminal:
+
+```bash
+npm run dev:api
+```
+
+Then open the Vite URL (usually `http://localhost:5173`). Production build: `npm run build`.
 
 ## Deploy on Vercel
 

@@ -4,7 +4,7 @@
 
 This plan extends the prior ATLAS Layer Strategy with a validated problems audit. The north star shifts from "layer toggles on a globe" to **analyst workflow**: view events → select signals → build a dossier canvas → export/save.
 
-**Related docs:** [ATLAS_VISION.md](../../ATLAS_VISION.md) · [RESOURCES.md](../RESOURCES.md)
+**Related docs:** [ATLAS_VISION.md](./ATLAS_VISION.md) · [RESOURCES.md](./RESOURCES.md)
 
 ---
 

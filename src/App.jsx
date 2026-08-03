@@ -17,6 +17,7 @@ import useWatchlistAlerts from './hooks/useWatchlistAlerts'
 import useSurgeAlerts from './hooks/useSurgeAlerts'
 import useAlertDispatch from './hooks/useAlertDispatch'
 import useWorkspaceEventCapture from './hooks/useWorkspaceEventCapture'
+import { useOntologyHydration } from './hooks/useOntologyHydration'
 import ToastHost from './components/UI/ToastHost'
 import CountryContextMenu from './components/UI/CountryContextMenu'
 import GlobeLegend from './components/UI/GlobeLegend'
@@ -138,6 +139,7 @@ function AtlasLiveApp() {
   const showDashboard = onGlobeView && user && appView === 'dashboard'
   const showGlobeWorkstation = onGlobeView && !showDashboard
   const inWorkspace = showGlobeWorkstation && Boolean(activeWorkspaceId)
+  useOntologyHydration(showGlobeWorkstation)
   const mobileMode = useAtlasStore((s) => s.mobileMode)
   const inspectorType = useAtlasStore((s) => s.ui.inspector?.type)
 

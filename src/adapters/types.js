@@ -28,9 +28,22 @@
 
 /**
  * @typedef {object} PollConfig
- * @property {string} url
+ * @property {string} [url] — omitted when the adapter supplies `fetchRaw`
  * @property {'json' | 'text'} format
  * @property {number} pollInterval
+ * @property {Record<string, string>} [headers]
+ * @property {boolean} [custom] — true when transport runs through `fetchRaw`
+ */
+
+/**
+ * Transport context passed to `fetchRaw`. Lets the same adapter run inside the
+ * browser worker (relative proxy URLs) and on the server (absolute origin).
+ * @typedef {object} FetchContext
+ * @property {string} [baseUrl] — origin to prefix onto same-origin `/api/*` routes
+ * @property {boolean} [serverSide] — true outside the browser; lets adapters skip CORS proxies
+ * @property {(url: string, opts?: object) => Promise<any>} fetchJson
+ * @property {(url: string, opts?: object) => Promise<string>} fetchText
+ * @property {AbortSignal} [signal]
  */
 
 /**
@@ -43,6 +56,12 @@
  * @property {(envKeys: Record<string, string>) => PollConfig | null} buildPollConfig
  * @property {(raw: unknown, deps: NormalizeDeps) => object[]} normalize
  * @property {(ctx?: { lastError?: string | null }) => SourceHealth} health
+ * @property {(config: PollConfig, ctx: FetchContext) => Promise<unknown>} [fetchRaw]
+ *   Multi-leg or non-URL transport. When present, callers use this instead of
+ *   fetching `config.url` directly.
+ * @property {(raw: unknown) => object | null} [aggregate]
+ *   Side-channel reduction over the full raw payload (e.g. GDELT country
+ *   aggregates for the choropleth), computed before pin filtering.
  */
 
 /**

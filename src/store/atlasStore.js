@@ -17,7 +17,7 @@ import { supabase } from '../services/supabase'
 import { resolveFocusBboxForIsoCodes } from '../core/workspaceMatch'
 import {
   buildInvestigationFromWorkspace,
-  loadInvestigationForWorkspace,
+  loadInvestigationAsync,
   saveInvestigationForWorkspace,
 } from '../core/investigationPersistence'
 import { eventToEvidence } from '../core/investigationSchema'
@@ -1091,7 +1091,7 @@ export const useAtlasStore = create((set, get) => ({
       }
     }
     if (!ws) return
-    let investigation = loadInvestigationForWorkspace(id)
+    let investigation = await loadInvestigationAsync(id)
     if (!investigation) investigation = buildInvestigationFromWorkspace(ws)
     set({
       activeWorkspaceId: id,

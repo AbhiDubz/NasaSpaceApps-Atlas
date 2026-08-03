@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadEnv } from 'vite'
 
 const pluginRoot = path.dirname(fileURLToPath(import.meta.url))
+const routesRoot = path.join(pluginRoot, 'api/_lib/routes')
 
 /** @param {import('http').IncomingMessage} req */
 function readBody(req) {
@@ -44,33 +45,43 @@ async function toWebRequest(req, url) {
   return new Request(url, { method, headers, body })
 }
 
-// `style` selects how the handler is invoked:
-//   - 'web'  → Edge-style `handler(Request) => Response` (default)
-//   - 'node' → Node-style `handler(req, res)` (Vercel Node serverless functions)
+function route(name, opts = {}) {
+  return {
+    methods: opts.methods || [opts.method || 'GET'],
+    match: new RegExp(`^\\/api\\/${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\/?$`),
+    module: path.join(routesRoot, `${name}.js`),
+    style: opts.style || 'web',
+  }
+}
+
+// Handlers live under api/_lib/routes/ (same modules production catch-all uses).
 const DEV_API_ROUTES = [
-  { method: 'GET', match: /^\/api\/opensky-states\/?$/, module: path.join(pluginRoot, 'api/opensky-states.js') },
-  { method: 'GET', match: /^\/api\/celestrak-tle\/?$/, module: path.join(pluginRoot, 'api/celestrak-tle.js') },
-  { method: 'GET', match: /^\/api\/aisstream-ships\/?$/, module: path.join(pluginRoot, 'api/aisstream-ships.js') },
-  { method: 'GET', match: /^\/api\/cameras\/?$/, module: path.join(pluginRoot, 'api/cameras.js') },
-  { method: 'GET', match: /^\/api\/nhc-storms\/?$/, module: path.join(pluginRoot, 'api/nhc-storms.js') },
-  { method: 'GET', match: /^\/api\/gdacs-rss\/?$/, module: path.join(pluginRoot, 'api/gdacs-rss.js') },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/feed-proxy\/?$/, module: path.join(pluginRoot, 'api/feed-proxy.js') },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/gdelt-api\/?$/, module: path.join(pluginRoot, 'api/gdelt-api.js') },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/gdelt-data\/?$/, module: path.join(pluginRoot, 'api/gdelt-data.js') },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/news-proxy\/?$/, module: path.join(pluginRoot, 'api/news-proxy.js') },
-  { methods: ['GET', 'POST', 'OPTIONS'], match: /^\/api\/feed-snapshots\/?$/, module: path.join(pluginRoot, 'api/feed-snapshots.js') },
-  { method: 'POST', match: /^\/api\/overpass-landmarks\/?$/, module: path.join(pluginRoot, 'api/overpass-landmarks.js') },
-  // BigQuery proxy (Historical / Imagery / Network tabs). Served here so the
-  // main `npm run dev` server fully covers /api and `vercel dev` is optional.
-  { methods: ['GET', 'POST', 'OPTIONS'], match: /^\/api\/gdelt-query\/?$/, module: path.join(pluginRoot, 'api/gdelt-query.js'), style: 'node' },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/indicators\/?$/, module: path.join(pluginRoot, 'api/indicators.js') },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/bluesky-posts\/?$/, module: path.join(pluginRoot, 'api/bluesky-posts.js') },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/fact-check-claims\/?$/, module: path.join(pluginRoot, 'api/fact-check-claims.js') },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/sentinel2-scene\/?$/, module: path.join(pluginRoot, 'api/sentinel2-scene.js') },
-  { methods: ['GET', 'POST', 'OPTIONS'], match: /^\/api\/entities\/?$/, module: path.join(pluginRoot, 'api/entities.js') },
-  { methods: ['POST', 'OPTIONS'], match: /^\/api\/contact\/?$/, module: path.join(pluginRoot, 'api/contact.js') },
-  { methods: ['POST', 'OPTIONS'], match: /^\/api\/export-report\/?$/, module: path.join(pluginRoot, 'api/export-report.js'), style: 'node' },
-  { methods: ['GET', 'OPTIONS'], match: /^\/api\/export-report-status\/?$/, module: path.join(pluginRoot, 'api/export-report-status.js'), style: 'node' },
+  route('opensky-states'),
+  route('celestrak-tle'),
+  route('aisstream-ships'),
+  route('cameras'),
+  route('nhc-storms'),
+  route('gdacs-rss'),
+  route('feed-proxy', { methods: ['GET', 'OPTIONS'] }),
+  route('gdelt-api', { methods: ['GET', 'OPTIONS'] }),
+  route('gdelt-data', { methods: ['GET', 'OPTIONS'] }),
+  route('news-proxy', { methods: ['GET', 'OPTIONS'] }),
+  route('feed-snapshots', { methods: ['GET', 'POST', 'OPTIONS'] }),
+  route('overpass-landmarks', { methods: ['POST'] }),
+  route('gdelt-query', { methods: ['GET', 'POST', 'OPTIONS'], style: 'node' }),
+  route('indicators', { methods: ['GET', 'OPTIONS'] }),
+  route('bluesky-posts', { methods: ['GET', 'OPTIONS'] }),
+  route('fact-check-claims', { methods: ['GET', 'OPTIONS'] }),
+  route('sentinel2-scene', { methods: ['GET', 'OPTIONS'] }),
+  route('entities', { methods: ['GET', 'POST', 'OPTIONS'] }),
+  route('ingest', { methods: ['GET', 'POST', 'OPTIONS'] }),
+  route('seed-ontology', { methods: ['POST', 'OPTIONS'] }),
+  route('ontology', { methods: ['GET', 'POST', 'OPTIONS'] }),
+  route('annotations', { methods: ['GET', 'POST', 'DELETE', 'OPTIONS'] }),
+  route('investigations', { methods: ['GET', 'PUT', 'OPTIONS'] }),
+  route('contact', { methods: ['POST', 'OPTIONS'] }),
+  route('export-report', { methods: ['POST', 'OPTIONS'], style: 'node' }),
+  route('export-report-status', { methods: ['GET', 'OPTIONS'], style: 'node' }),
 ]
 
 /** @type {Map<string, { default: Function }>} */
@@ -94,34 +105,34 @@ export default function atlasApiDevPlugin() {
 
       server.middlewares.use(async (req, res, next) => {
         const pathname = (req.url || '').split('?')[0]
-        const route = DEV_API_ROUTES.find((r) => {
+        if (!pathname.startsWith('/api/')) return next()
+
+        const method = (req.method || 'GET').toUpperCase()
+        const hit = DEV_API_ROUTES.find((r) => {
           const methods = r.methods || [r.method]
-          return methods.includes(req.method) && r.match.test(pathname)
+          return methods.map((m) => m.toUpperCase()).includes(method) && r.match.test(pathname)
         })
-        if (!route) return next()
+        if (!hit) return next()
 
         try {
-          const mod = await loadHandler(route.module)
+          const mod = await loadHandler(hit.module)
           const handler = mod.default
-          if (typeof handler !== 'function') return next()
-
-          if (route.style === 'node') {
-            // Vercel Node serverless functions accept the raw (req, res) and
-            // write the response themselves, so hand the dev server's objects
-            // straight through.
+          if (hit.style === 'node') {
             await handler(req, res)
             return
           }
-
-          const host = req.headers.host || 'localhost:5173'
+          const host = req.headers.host || 'localhost'
           const url = `http://${host}${req.url}`
           const webReq = await toWebRequest(req, url)
-          const webRes = await handler(webReq)
-          await sendWebResponse(req, res, webRes)
+          const response = await handler(webReq)
+          await sendWebResponse(req, res, response)
         } catch (err) {
-          res.statusCode = 502
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ error: err?.message || 'Dev API handler failed' }))
+          console.error('[atlas-api]', pathname, err)
+          if (!res.headersSent) {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: err.message || 'API handler failed' }))
+          }
         }
       })
     },

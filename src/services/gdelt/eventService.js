@@ -229,9 +229,9 @@ const MAX_CAMEO_ROWS = 5000
  * `lastupdate.txt`; if that 404s (GDELT maintenance windows), falls back to
  * the tail of `masterfilelist.txt`.
  */
-async function resolveLatestExportZipUrl() {
+async function resolveLatestExportZipUrl(opts = {}) {
   try {
-    const upd = await fetch(gdeltDataProxyFile('gdeltv2/lastupdate.txt'), {
+    const upd = await fetch(gdeltDataProxyFile('gdeltv2/lastupdate.txt', opts), {
       signal: AbortSignal.timeout(25_000),
       redirect: 'manual',
     })
@@ -241,7 +241,7 @@ async function resolveLatestExportZipUrl() {
       if (line) {
         const parts = line.trim().split(/\s+/)
         const url = parts[parts.length - 1]
-        if (url && GDELT_EXPORT_ZIP_RE.test(url)) return gdeltDataProxyUrl(url)
+        if (url && GDELT_EXPORT_ZIP_RE.test(url)) return gdeltDataProxyUrl(url, opts)
       }
     }
   } catch {
@@ -249,7 +249,7 @@ async function resolveLatestExportZipUrl() {
   }
 
   try {
-    const master = await fetch(gdeltDataProxyFile('gdeltv2/masterfilelist.txt'), {
+    const master = await fetch(gdeltDataProxyFile('gdeltv2/masterfilelist.txt', opts), {
       signal: AbortSignal.timeout(30_000),
       redirect: 'manual',
     })
@@ -261,7 +261,7 @@ async function resolveLatestExportZipUrl() {
       if (!line || !line.includes('.export.CSV.zip')) continue
       const parts = line.trim().split(/\s+/)
       const url = parts[parts.length - 1]
-      if (url && GDELT_EXPORT_ZIP_RE.test(url)) return gdeltDataProxyUrl(url)
+      if (url && GDELT_EXPORT_ZIP_RE.test(url)) return gdeltDataProxyUrl(url, opts)
     }
   } catch {
     /* give up */
@@ -297,9 +297,9 @@ export function parseGdeltExportZipTimestampMs(zipUrl) {
  * geocoded, CAMEO-classified events per tick — the richest real-time feed
  * GDELT offers for free.
  */
-export async function fetchGdeltCameoEvents() {
+export async function fetchGdeltCameoEvents(opts = {}) {
   try {
-    const zipUrl = await resolveLatestExportZipUrl()
+    const zipUrl = await resolveLatestExportZipUrl(opts)
     if (!zipUrl) return []
 
     // HEAD check — skip only when the file is definitely too large. Missing

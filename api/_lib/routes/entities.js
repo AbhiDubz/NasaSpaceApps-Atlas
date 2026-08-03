@@ -13,8 +13,8 @@ import {
   queryEntities,
   traverseEntityGraph,
   buildLinksFromInvestigation,
-} from '../src/core/entityResolution.js'
-import { queryEntitiesDb, queryEntityGraph, upsertEntity } from './_lib/entityStore.js'
+} from '../../../src/core/entityResolution.js'
+import { queryEntitiesDb, queryEntityGraph, upsertEntity } from '../entityStore.js'
 
 export const config = {
   maxDuration: 30,

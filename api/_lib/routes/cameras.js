@@ -10,7 +10,7 @@
  * Response: { cameras: Camera[], meta: { providers, count, fetchedAt } }
  */
 
-import { CORS_HEADERS, envFirst, jsonResponse, optionsResponse, upstreamFetch } from './_lib/proxyCommon.js'
+import { CORS_HEADERS, envFirst, jsonResponse, optionsResponse, upstreamFetch } from '../proxyCommon.js'
 
 export const config = {
   runtime: 'edge',
