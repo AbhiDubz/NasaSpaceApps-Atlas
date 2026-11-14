@@ -26,7 +26,7 @@ export const HAZARD_EFFECT_PROFILES = {
     baseScale: 18,
     severityScale: 4,
     altitudeM: 2200,
-    heroParticles: true,
+    heroParticles: false,
     anim2dClass: 'atlas-hazard--flame',
     family: 'flame',
   },
