@@ -47,6 +47,8 @@ import useShareCameraBridge from '../../hooks/useShareCameraBridge'
 import { PLACE_SEARCH_PIN_SRC } from '../../constants/placeSearchPin'
 import { buildTerminatorRing } from '../../core/solarTerminator'
 import Model3D from './Model3D'
+import WindParticleOverlay from './WindParticleOverlay'
+import { map3dWindFrame } from '../../globe-core/windFrames'
 import { useHazardModelAnimator } from '../../hooks/useHazardModelAnimator'
 import { preloadHazardModels } from '../../core/hazardModelCatalog'
 import { resolveHazardModelScale, resolveHazardModelAltitudeM } from '../../core/environmentHazardEffects'
@@ -60,6 +62,8 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 
 const RANGE_MIN_M = 120
 const RANGE_MAX_M = 35_000_000
+/** Centre altitudes above this are a lifted camera, not terrain (Everest is under 9 km). */
+const LIFTED_CENTER_MIN_ALT_M = 100_000
 /** Min interval between zoom writes to the global store while the camera moves (keeps UI off the critical path). */
 const ZOOM_STORE_MIN_INTERVAL_MS = 100
 const INTRO_FROM_RANGE_M = 50_000_000
@@ -286,6 +290,28 @@ function InnerMap({ onGlobeReady }) {
 
   const dataLayers = useAtlasStore((s) => s.dataLayers)
   const terminatorOn = dataLayers?.terminator !== false
+  const windOn = dataLayers?.windOverlay === true
+  /** Camera snapshot for the wind overlay, read straight off the map element so it tracks fly-to animations. */
+  const getWindFrame = useCallback((width, height) => {
+    const el = map3dRef.current?.map3d
+    const cam = cameraRef.current
+    const center = literalLatLng(el?.center) || literalLatLng(cam.center)
+    if (!center) return null
+    const num = (v, fallback) => (Number.isFinite(Number(v)) && v != null ? Number(v) : fallback)
+    return map3dWindFrame(
+      {
+        centerLat: center.lat,
+        centerLng: center.lng,
+        centerAltM: num(el?.center?.altitude, 0),
+        rangeM: num(el?.range, cam.range ?? STARTUP_ORBIT_RANGE_M),
+        headingDeg: num(el?.heading, cam.heading ?? 0),
+        tiltDeg: num(el?.tilt, cam.tilt ?? 0),
+        fovDeg: num(el?.fov, undefined),
+      },
+      width,
+      height,
+    )
+  }, [])
   const [terminatorRing, setTerminatorRing] = useState(() =>
     buildTerminatorRing().map((p) => ({ ...p, altitude: 12000 })),
   )
@@ -400,7 +426,11 @@ function InnerMap({ onGlobeReady }) {
 
       const now = performance.now()
       if (typeof d.range === 'number') {
-        const clamped = Math.max(RANGE_MIN_M, Math.min(RANGE_MAX_M, d.range))
+        // Zoomed far out, Map3D reports range 0 with the centre lifted to the camera's
+        // height. Fold that height back in, or the tracked range collapses to RANGE_MIN_M.
+        const liftedM = readMap3dCenterLiteral(d.center ?? cameraRef.current.center)?.altitude
+        const effectiveRange = d.range + (liftedM > LIFTED_CENTER_MIN_ALT_M ? liftedM : 0)
+        const clamped = Math.max(RANGE_MIN_M, Math.min(RANGE_MAX_M, effectiveRange))
         cameraRef.current.range = clamped
         const bucket = bucketCameraRangeM(clamped)
         if (bucket !== cameraRangeBucketRef.current) {
@@ -1353,6 +1383,7 @@ function InnerMap({ onGlobeReady }) {
         })}
       </Map3D>
       </div>
+      <WindParticleOverlay enabled={windOn && globeMapReady} getFrame={getWindFrame} />
     </div>
   )
 }

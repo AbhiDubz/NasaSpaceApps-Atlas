@@ -100,3 +100,48 @@ export function sampleWind(grid, lat, lng) {
   }
   return { u: best.u, v: best.v }
 }
+
+/**
+ * Smooth wind lookup: bilinear interpolation over the regular grid that
+ * `fetchWindGrid` returns (wraps around in longitude, clamps in latitude).
+ * Falls back to nearest-point lookup if the grid is not the expected shape.
+ * @param {WindGridPoint[]} grid
+ * @returns {(lat: number, lng: number) => { u: number, v: number }}
+ */
+export function makeWindSampler(grid) {
+  const lats = [...new Set((grid || []).map((p) => p.lat))].sort((a, b) => a - b)
+  const lngs = [...new Set((grid || []).map((p) => p.lng))].sort((a, b) => a - b)
+  const rows = lats.length
+  const cols = lngs.length
+  if (rows < 2 || cols < 2 || rows * cols !== grid.length) {
+    return (lat, lng) => sampleWind(grid, lat, lng)
+  }
+
+  const latStep = lats[1] - lats[0]
+  const lngStep = lngs[1] - lngs[0]
+  const u = new Float32Array(rows * cols)
+  const v = new Float32Array(rows * cols)
+  for (const p of grid) {
+    const i = Math.round((p.lat - lats[0]) / latStep) * cols + Math.round((p.lng - lngs[0]) / lngStep)
+    u[i] = p.u
+    v[i] = p.v
+  }
+  const out = { u: 0, v: 0 }
+
+  return (lat, lng) => {
+    const fy = Math.min(rows - 1, Math.max(0, (lat - lats[0]) / latStep))
+    const y0 = Math.min(rows - 2, Math.floor(fy))
+    const ty = fy - y0
+    let fx = ((lng - lngs[0]) / lngStep) % cols
+    if (fx < 0) fx += cols
+    const x0 = Math.floor(fx) % cols
+    const x1 = (x0 + 1) % cols
+    const tx = fx - Math.floor(fx)
+    const a = y0 * cols
+    const b = a + cols
+    out.u = (u[a + x0] * (1 - tx) + u[a + x1] * tx) * (1 - ty) + (u[b + x0] * (1 - tx) + u[b + x1] * tx) * ty
+    out.v = (v[a + x0] * (1 - tx) + v[a + x1] * tx) * (1 - ty) + (v[b + x0] * (1 - tx) + v[b + x1] * tx) * ty
+    return out
+  }
+}
+

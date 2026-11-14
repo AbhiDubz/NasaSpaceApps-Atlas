@@ -12,7 +12,7 @@ import {
   subscribeToGdeltAggregates,
   destroyEventBus,
 } from '../core/eventBus'
-import { isLayerToggleOn } from '../core/layerCatalog'
+import { isLayerToggleOn, SUBMISSION_DEFAULT_OFF_LAYER_KEYS } from '../core/layerCatalog'
 import { supabase } from '../services/supabase'
 import { resolveFocusBboxForIsoCodes } from '../core/workspaceMatch'
 import {
@@ -57,7 +57,7 @@ const DEFAULT_DATA_LAYERS = {
   // ── field layers (aggregate surfaces) ──
   gdeltChoropleth: true, // GDELT per-country tone choropleth — the default monitor surface
   gdeltHeatmap: false,   // GDELT GEO PointHeatmap (noisy ghost dots; opt-in)
-  windOverlay: false,    // Open-Meteo wind particles (Globe.GL only)
+  windOverlay: false,    // Open-Meteo wind particles (3D globes only)
   // ── track layers (ambient live) ──
   adsb: false,           // OpenSky ADS-B aircraft — ambient eye candy, opt-in (Phase 6 audit)
   adsbMilitary: true,    // Military ICAO hex sub-filter (distinct sprite; applies when adsb is on)
@@ -87,7 +87,29 @@ const DATA_LAYERS_MIGRATION_KEY = 'atlas_data_layers_migration'
 const DATA_LAYERS_MIGRATION_VERSION = 'v6'
 const GIBS_IMAGERY_EXCLUSIVE_KEYS = ['gibsTrueColor', 'gibsFires', 'gibsAerosol', 'gibsDust', 'gibsClouds']
 
+for (const key of SUBMISSION_DEFAULT_OFF_LAYER_KEYS) DEFAULT_DATA_LAYERS[key] = false
+
+/** One-time switch-off of disaster pins for browsers that saved layer settings before it. */
+const SUBMISSION_LAYERS_MIGRATION_KEY = 'atlas_trend_detective_layers'
+function applySubmissionLayerDefaults(layers) {
+  if (!SUBMISSION_DEFAULT_OFF_LAYER_KEYS.length) return layers
+  try {
+    if (localStorage.getItem(SUBMISSION_LAYERS_MIGRATION_KEY) === 'v1') return layers
+    const next = { ...layers }
+    for (const key of SUBMISSION_DEFAULT_OFF_LAYER_KEYS) next[key] = false
+    localStorage.setItem(STORAGE_KEY_DATA_LAYERS, JSON.stringify(next))
+    localStorage.setItem(SUBMISSION_LAYERS_MIGRATION_KEY, 'v1')
+    return next
+  } catch {
+    return layers
+  }
+}
+
 function loadDataLayers() {
+  return applySubmissionLayerDefaults(loadDataLayersRaw())
+}
+
+function loadDataLayersRaw() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_DATA_LAYERS)
     if (raw) {

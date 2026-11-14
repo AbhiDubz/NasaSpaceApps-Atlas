@@ -41,6 +41,7 @@ import {
     isSpriteArchetype,
     isTrackArchetype,
 } from '../../globe-core'
+import { globeGlWindFrame } from '../../globe-core/windFrames'
 import { activeGibsImageryKey, gibsTileEngineUrlForKey } from '../../config/gibsBasemap'
 import { buildTerminatorRing } from '../../core/solarTerminator'
 import { showDetectionLabel as getDetectionLabel } from '../../core/detectionLabels'
@@ -48,9 +49,21 @@ import WindParticleOverlay from './WindParticleOverlay'
 import HazardHeroOverlay from './HazardHeroOverlay'
 
 // Textures (CDN)
-const EARTH_DAY = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-day.jpg'
+// 4096×2048 Blue Marble — earth-day.jpg is only 1600×800 and looks soft on hi-dpi screens
+const EARTH_DAY = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg'
 const EARTH_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg'
 const EARTH_BUMP = 'https://unpkg.com/three-globe/example/img/earth-topology.png'
+/**
+ * Close-zoom satellite basemap (Esri World Imagery, free with attribution).
+ * A single 4096px texture goes soft near the surface, so below
+ * SATELLITE_TILES_ON_ALT (in globe radii) the globe streams slippy tiles instead.
+ */
+const SATELLITE_TILE_URL = (x, y, l) =>
+    `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${l}/${y}/${x}`
+const SATELLITE_TILES_ATTRIBUTION = 'Imagery © Esri, Maxar, Earthstar Geographics'
+const SATELLITE_TILES_ON_ALT = 0.45
+/** Higher than the "on" altitude so the basemap does not flicker at the boundary. */
+const SATELLITE_TILES_OFF_ALT = 0.6
 const BG_IMG = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/night-sky.png'
 
 const POINT_ALTITUDE = 0.01
@@ -275,8 +288,11 @@ export default function GlobeGLView({ onGlobeReady }) {
     const setZoomLevel = useAtlasStore((s) => s.setZoomLevel)
 
     const gibsImageryKey = activeGibsImageryKey(dataLayers)
+    const [closeZoom, setCloseZoom] = useState(false)
+    const satelliteTilesOn = closeZoom && !gibsImageryKey
     const terminatorOn = dataLayers?.terminator !== false
     const windOn = dataLayers?.windOverlay === true
+    const getWindFrame = useCallback((w, h) => globeGlWindFrame(globeRef.current, w, h), [])
 
     useShareCameraBridge({
         ready: globeReady,
@@ -424,6 +440,11 @@ export default function GlobeGLView({ onGlobeReady }) {
                 loader.loadAsync(EARTH_NIGHT),
             ]).then(([dayTex, nightTex]) => {
                 if (destroyed) return
+
+                // Keep the surface crisp towards the limb, where it is seen at a grazing angle
+                const maxAniso = globe.renderer?.()?.capabilities?.getMaxAnisotropy?.() || 1
+                dayTex.anisotropy = maxAniso
+                nightTex.anisotropy = maxAniso
 
                 const material = new ShaderMaterial({
                     uniforms: {
@@ -767,11 +788,16 @@ export default function GlobeGLView({ onGlobeReady }) {
         if (gibsImageryKey) {
             globe.globeTileEngineUrl(gibsTileEngineUrlForKey(gibsImageryKey))
             globe.globeTileEngineClearCache?.()
+        } else if (closeZoom) {
+            globe.globeTileEngineUrl(SATELLITE_TILE_URL)
+            globe.globeTileEngineClearCache?.()
         } else {
             globe.globeTileEngineUrl(null)
             globe.globeTileEngineClearCache?.()
         }
-    }, [gibsImageryKey])
+        // Tiles are only requested when the camera moves — nudge it so a still view fills in
+        globe.controls()?.dispatchEvent({ type: 'change' })
+    }, [gibsImageryKey, closeZoom])
 
     // Solar terminator + NHC storm track paths
     useEffect(() => {
@@ -868,6 +894,10 @@ export default function GlobeGLView({ onGlobeReady }) {
         if (!globe) return
         const controls = globe.controls()
         const onZoom = () => {
+            const altitude = globe.pointOfView()?.altitude
+            if (altitude != null) {
+                setCloseZoom((on) => (on ? altitude < SATELLITE_TILES_OFF_ALT : altitude < SATELLITE_TILES_ON_ALT))
+            }
             const now = performance.now()
             if (now - lastZoomStoreEmitRef.current < 100) return
             lastZoomStoreEmitRef.current = now
@@ -889,7 +919,12 @@ export default function GlobeGLView({ onGlobeReady }) {
                 className={`absolute inset-0${tacticalMode ? ' atlas-tactical-mode' : ''}`}
                 style={{ cursor: 'grab', background: '#030712' }}
             />
-            <WindParticleOverlay enabled={windOn} />
+            <WindParticleOverlay enabled={windOn} getFrame={getWindFrame} />
+            {satelliteTilesOn && (
+                <div className="pointer-events-none absolute bottom-9 right-2 z-[2] rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-slate-300">
+                    {SATELLITE_TILES_ATTRIBUTION}
+                </div>
+            )}
             <HazardHeroOverlay
                 enabled={globeReady && heroSites.length > 0}
                 heroes={heroSites}
