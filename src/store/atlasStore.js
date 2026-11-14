@@ -751,12 +751,49 @@ export const useAtlasStore = create((set, get) => ({
       s.closeWorkbench()
       return true
     }
+    if (s.trendCase) {
+      set({ trendCase: null })
+      return true
+    }
     if (s.ui.inspector) {
       s.closeInspector()
       return true
     }
     return false
   },
+
+  // ── Trend Detective case file ──
+  /**
+   * `{ places: [{lat,lng,label?}, …up to 2], variable, theme, pickingCompare }`
+   * or null when the panel is closed. `places` may be empty (guided start).
+   */
+  trendCase: null,
+  openTrendCase: (init = {}) => set((s) => ({
+    trendCase: {
+      places: init.places || s.trendCase?.places || [],
+      variable: init.variable || s.trendCase?.variable || 'T2M',
+      theme: init.theme !== undefined ? init.theme : s.trendCase?.theme ?? null,
+      pickingCompare: false,
+    },
+  })),
+  closeTrendCase: () => set({ trendCase: null }),
+  updateTrendCase: (patch) => set((s) => (s.trendCase ? { trendCase: { ...s.trendCase, ...patch } } : {})),
+  /** A globe click: fills the compare slot when armed, otherwise starts a new case. */
+  pickTrendPlace: ({ lat, lng, label }) => set((s) => {
+    const cur = s.trendCase
+    const place = { lat, lng, label: label || null }
+    if (cur?.pickingCompare && cur.places.length) {
+      return { trendCase: { ...cur, places: [cur.places[0], place], pickingCompare: false } }
+    }
+    return {
+      trendCase: {
+        places: [place],
+        variable: cur?.variable || 'T2M',
+        theme: cur?.theme ?? null,
+        pickingCompare: false,
+      },
+    }
+  }),
 
   setShareCamera: (camera) => set({ shareCamera: camera }),
   setPendingUrlEventId: (id) => set({ pendingUrlEventId: id }),

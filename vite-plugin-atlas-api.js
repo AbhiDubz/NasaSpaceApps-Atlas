@@ -80,6 +80,8 @@ const DEV_API_ROUTES = [
   route('annotations', { methods: ['GET', 'POST', 'DELETE', 'OPTIONS'] }),
   route('investigations', { methods: ['GET', 'PUT', 'OPTIONS'] }),
   route('contact', { methods: ['POST', 'OPTIONS'] }),
+  route('nasa-power', { methods: ['GET', 'OPTIONS'] }),
+  route('trend', { methods: ['GET', 'OPTIONS'] }),
   route('export-report', { methods: ['POST', 'OPTIONS'], style: 'node' }),
   route('export-report-status', { methods: ['GET', 'OPTIONS'], style: 'node' }),
 ]

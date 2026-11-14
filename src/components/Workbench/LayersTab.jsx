@@ -31,6 +31,7 @@ import { useAtlasStore } from '../../store/atlasStore'
 import { GIBS_IMAGERY_LAYERS } from '../../config/gibsBasemap'
 import {
   LAYER_CATALOG,
+  isLayerHidden,
   getLayerHealth,
   layerAppliesToMode,
   GLOBE_MODE_LABELS,
@@ -206,7 +207,7 @@ export default function LayersTab() {
 
   const grouped = useMemo(() => {
     const available = Object.entries(LAYER_CATALOG)
-      .filter(([key]) => layerAppliesToMode(key, globeMode))
+      .filter(([key]) => layerAppliesToMode(key, globeMode) && !isLayerHidden(key))
     const claimed = new Set()
 
     return INTENT_GROUPS.map((group) => {
