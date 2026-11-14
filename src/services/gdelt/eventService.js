@@ -202,8 +202,12 @@ export function parseGdeltCsvText(text, maxRows = 400) {
   return out
 }
 
-/** Strict allowlist: only official GDELT v2 15-minute event exports (SSRF-safe). */
-const GDELT_EXPORT_ZIP_RE = /^https:\/\/data\.gdeltproject\.org\/gdeltv2\/\d{14}\.export\.CSV\.zip$/
+/**
+ * Strict allowlist: only official GDELT v2 15-minute event exports (SSRF-safe).
+ * GDELT's own file lists use `http://`; the fetch goes through the proxy or is
+ * upgraded to https by `gdeltDataProxyUrl`, so both schemes are accepted here.
+ */
+const GDELT_EXPORT_ZIP_RE = /^https?:\/\/data\.gdeltproject\.org\/gdeltv2\/\d{14}\.export\.CSV\.zip$/
 
 /**
  * Browser-safe upper bound for zip download. Typical exports range 50-120 MB

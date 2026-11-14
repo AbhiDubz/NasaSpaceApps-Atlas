@@ -242,12 +242,12 @@ const GDELT_GEO_DIM_QUERIES = [
  * samples, panel-only).
  */
 const GDELT_DOC_DIM_QUERIES = [
-  { query: '(conflict OR war OR military OR terror OR attack OR violence OR protest)', dimension: 'safety' },
-  { query: '(election OR parliament OR law OR court OR sanctions OR diplomacy OR treaty OR government OR corruption)', dimension: 'governance' },
-  { query: '(economy OR trade OR market OR inflation OR GDP OR tariff OR recession OR bank)', dimension: 'economy' },
-  { query: '(humanitarian OR migration OR refugee OR health OR disease OR hospital OR hunger OR strike OR labor)', dimension: 'people' },
-  { query: '(climate OR environment OR pollution OR wildfire OR flood OR storm OR earthquake OR disaster OR renewable)', dimension: 'environment' },
-  { query: '(media OR censorship OR journalist OR press OR disinformation OR narrative OR broadcast)', dimension: 'narrative' },
+  { query: '(conflict OR war OR military OR terror OR attack OR violence OR protest) sourcelang:english', dimension: 'safety' },
+  { query: '(election OR parliament OR law OR court OR sanctions OR diplomacy OR treaty OR government OR corruption) sourcelang:english', dimension: 'governance' },
+  { query: '(economy OR trade OR market OR inflation OR GDP OR tariff OR recession OR bank) sourcelang:english', dimension: 'economy' },
+  { query: '(humanitarian OR migration OR refugee OR health OR disease OR hospital OR hunger OR strike OR labor) sourcelang:english', dimension: 'people' },
+  { query: '(climate OR environment OR pollution OR wildfire OR flood OR storm OR earthquake OR disaster OR renewable) sourcelang:english', dimension: 'environment' },
+  { query: '(media OR censorship OR journalist OR press OR disinformation OR narrative OR broadcast) sourcelang:english', dimension: 'narrative' },
 ]
 
 const GDELT_DOC_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc'
