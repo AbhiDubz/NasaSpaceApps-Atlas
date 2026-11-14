@@ -7,7 +7,8 @@
  * Requires a MAP_KEY from: https://firms.modaps.eosdis.nasa.gov/api/map_key
  * Set as VITE_FIRMS_MAP_KEY in .env
  *
- * Data: VIIRS SNPP Near Real-Time (NRT) active fires, global, last 24 hours.
+ * Data: VIIRS NOAA-21 Near Real-Time (NRT) active fires, global, last 24 hours.
+ * (Suomi NPP's VIIRS_SNPP_NRT feed stopped updating on 2026-11-02.)
  */
 
 /**
@@ -90,10 +91,10 @@ export function parseFirmsCSV(csvText) {
 /**
  * Fetch active fires from NASA FIRMS.
  * @param {string} mapKey - FIRMS API MAP_KEY
- * @param {string} source - Satellite source: VIIRS_SNPP_NRT, VIIRS_NOAA20_NRT, MODIS_NRT
+ * @param {string} source - Satellite source: VIIRS_NOAA21_NRT, VIIRS_NOAA20_NRT, MODIS_NRT
  * @param {number} dayRange - Number of days (1, 2, or 10)
  */
-export async function fetchFirmsData(mapKey, source = 'VIIRS_SNPP_NRT', dayRange = 1) {
+export async function fetchFirmsData(mapKey, source = 'VIIRS_NOAA21_NRT', dayRange = 1) {
   if (!mapKey) {
     console.warn('[FIRMS] No MAP_KEY provided. Register at https://firms.modaps.eosdis.nasa.gov/api/map_key')
     return []
