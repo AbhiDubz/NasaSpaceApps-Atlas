@@ -27,6 +27,7 @@ import { LANDMARK_SHORTCUT_KEYS } from './config/landmarkPresets'
 import LandingPage from './components/Landing/LandingPage'
 import WorkspaceDashboard from './components/Workspace/WorkspaceDashboard'
 import WorkspaceTimeline from './components/Workspace/WorkspaceTimeline'
+import TrendCaseFile, { TrendLauncher } from './components/Trend/TrendCaseFile'
 
 const GoogleGlobe = lazy(() => import('./components/Globe/GoogleGlobe'))
 const GlobeGLView = lazy(() => import('./components/Globe/GlobeGLView'))
@@ -344,6 +345,8 @@ function AtlasLiveApp() {
 
                   <Inspector />
                   <Workbench />
+                  <TrendCaseFile />
+                  <TrendLauncher />
                   <StreetViewOverlay />
                   <YouTubeEmbedOverlay />
                   <HoverLabel />

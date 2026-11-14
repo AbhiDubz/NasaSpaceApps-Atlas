@@ -664,7 +664,12 @@ export default function GlobeGLView({ onGlobeReady }) {
             .polygonStrokeColor(() => 'rgba(255,255,255,0.22)')
             .polygonsTransitionDuration(600)
             // Storm cones remain non-interactive; country investigation is via right-click menu
-            .onPolygonClick(() => {})
+            // A click on a polygon (country tint, storm cone) still counts as a click on the ground beneath it.
+            .onPolygonClick((_poly, _ev, coords) => {
+                if (Number.isFinite(coords?.lat) && Number.isFinite(coords?.lng)) {
+                    applyGlobeMapClick({ lat: coords.lat, lng: coords.lng })
+                }
+            })
 
         globe
             .pathsData([])

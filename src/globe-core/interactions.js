@@ -4,6 +4,7 @@
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import { point } from '@turf/helpers'
 import { useAtlasStore } from '../store/atlasStore'
+import { normalizeLatLng } from '../services/nasaPower/variables.js'
 import {
   findCountry,
   findCountryAtPoint,
@@ -246,7 +247,7 @@ export function resolveCountryAtPoint(lat, lng, choroplethRows) {
 /**
  * Globe background left-click — Street View when enabled; otherwise dismiss
  * selections / context menu. Country investigation is via right-click menu.
- * @returns {'streetview'|'dismiss'|'suppress'}
+ * @returns {'streetview'|'dismiss'|'suppress'|'trend'}
  */
 export function applyGlobeMapClick({ lat, lng, streetViewMode }) {
   const store = useAtlasStore.getState()
@@ -264,7 +265,16 @@ export function applyGlobeMapClick({ lat, lng, streetViewMode }) {
     return 'streetview'
   }
 
-  applyBackgroundClick()
+  // First click clears any selection; a click on open ground (or with the
+  // case file already open) asks "what is the trend here?".
+  const hadSelection = applyBackgroundClick()
+  if ((!hadSelection || store.trendCase) && Number.isFinite(lat) && Number.isFinite(lng)) {
+    const point = normalizeLatLng(lat, lng)
+    if (point) {
+      store.pickTrendPlace(point)
+      return 'trend'
+    }
+  }
   return 'dismiss'
 }
 

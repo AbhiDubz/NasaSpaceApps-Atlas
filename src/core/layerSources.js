@@ -1,7 +1,7 @@
 /**
  * Maps data-layer toggles to fetchManager source ids.
  */
-import { LAYER_CATALOG, isLayerToggleOn } from './layerCatalog.js'
+import { LAYER_CATALOG, HIDDEN_SOURCE_IDS, isLayerToggleOn } from './layerCatalog.js'
 
 /** Worker sources tied to globe data layers (toggle-gated). */
 export const LAYER_GATED_SOURCES = new Set(
@@ -45,7 +45,7 @@ export const TICKER_SOURCE_IDS = [
   'shodan',
   'electricity-maps',
   'entsoe',
-]
+].filter((id) => !HIDDEN_SOURCE_IDS.has(id))
 
 /**
  * @param {Record<string, boolean>} dataLayers
@@ -70,7 +70,7 @@ export function getActivePollSourceIds(dataLayers, allConfiguredIds = []) {
   const enabled = sourcesForEnabledLayers(dataLayers)
   const ids = new Set(TICKER_SOURCE_IDS.filter((id) => allConfiguredIds.includes(id)))
   for (const src of enabled) {
-    if (allConfiguredIds.includes(src)) ids.add(src)
+    if (allConfiguredIds.includes(src) && !HIDDEN_SOURCE_IDS.has(src)) ids.add(src)
   }
   return [...ids]
 }

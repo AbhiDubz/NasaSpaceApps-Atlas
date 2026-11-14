@@ -30,6 +30,7 @@
     "earth-history:bake-mosaic": "node scripts/earth-history/bake-polity-mosaic.mjs",
     "earth-history:bake": "npm run earth-history:bake-textures && npm run earth-history:bake-paleodem && npm run earth-history:bake-coastlines && npm run earth-history:manifest",
     "earth-history:bake-all": "npm run earth-history:bake && npm run earth-history:bake-polities && npm run earth-history:bake-mosaic",
+    "trend:demos": "node scripts/build-trend-demos.mjs",
     "deploy": "npx vercel --prod",
     "deploy:preview": "npx vercel"
   },

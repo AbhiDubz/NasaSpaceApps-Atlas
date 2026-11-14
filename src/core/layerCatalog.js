@@ -221,6 +221,25 @@ export const LAYER_CATALOG = {
   },
 }
 
+/**
+ * NASA Space Apps "Earth System Trend Detective" submission: layers and feeds
+ * unrelated to the challenge are forced off and hidden from Settings.
+ * Set VITE_ATLAS_SHOW_ALL_LAYERS=true to bring them back.
+ */
+const SHOW_ALL_LAYERS = import.meta.env?.VITE_ATLAS_SHOW_ALL_LAYERS === 'true'
+
+/** Aircraft, ships, conflict. */
+export const HIDDEN_LAYER_KEYS = new Set(
+  SHOW_ALL_LAYERS ? [] : ['adsb', 'adsbMilitary', 'ais', 'conflictEvents', 'referenceChokepoints'],
+)
+
+/** Always-on ticker feeds to stop polling: crypto prices / sentiment and conflict data. */
+export const HIDDEN_SOURCE_IDS = new Set(SHOW_ALL_LAYERS ? [] : ['coingecko', 'alt-fng', 'ucdp', 'acled'])
+
+export function isLayerHidden(layerKey) {
+  return HIDDEN_LAYER_KEYS.has(layerKey)
+}
+
 /** Catalog keys grouped by archetype, preserving catalog order. */
 export function layersByKind(kind) {
   return Object.entries(LAYER_CATALOG)
@@ -251,6 +270,7 @@ export { GLOBE_MODE_LABELS }
  * @param {Record<string, boolean>} dataLayers
  */
 export function isLayerToggleOn(layerKey, dataLayers) {
+  if (HIDDEN_LAYER_KEYS.has(layerKey)) return false
   const cfg = LAYER_CATALOG[layerKey]
   if (cfg?.optIn) return dataLayers?.[layerKey] === true
   if (layerKey === 'terminator') return dataLayers?.[layerKey] !== false

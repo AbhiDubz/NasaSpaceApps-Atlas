@@ -31,6 +31,8 @@ const WEB_ROUTES = {
   annotations: () => import('./_lib/routes/annotations.js'),
   investigations: () => import('./_lib/routes/investigations.js'),
   contact: () => import('./_lib/routes/contact.js'),
+  'nasa-power': () => import('./_lib/routes/nasa-power.js'),
+  trend: () => import('./_lib/routes/trend.js'),
 }
 
 export const config = {
