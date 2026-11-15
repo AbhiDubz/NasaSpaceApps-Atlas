@@ -428,12 +428,14 @@ function InnerMap({ onGlobeReady }) {
 
       const now = performance.now()
       if (typeof d.range === 'number') {
-        // Zoomed far out, Map3D reports range 0 with the centre lifted to the camera's
-        // height. Fold that height back in, or the tracked range collapses to RANGE_MIN_M.
+        // Zoom, LOD and fly-to keep upstream's raw-range semantics (far out, Map3D reports
+        // range 0 with the centre lifted, which clamps to RANGE_MIN_M).
+        const clamped = Math.max(RANGE_MIN_M, Math.min(RANGE_MAX_M, d.range))
+        cameraRef.current.range = clamped
+        // Share links need the true distance, so fold the lifted centre height back in for them only.
         const liftedM = readMap3dCenterLiteral(d.center ?? cameraRef.current.center)?.altitude
         const effectiveRange = d.range + (liftedM > LIFTED_CENTER_MIN_ALT_M ? liftedM : 0)
-        const clamped = Math.max(RANGE_MIN_M, Math.min(RANGE_MAX_M, effectiveRange))
-        cameraRef.current.range = clamped
+        cameraRef.current.shareRange = Math.max(RANGE_MIN_M, Math.min(RANGE_MAX_M, effectiveRange))
         const bucket = bucketCameraRangeM(clamped)
         if (bucket !== cameraRangeBucketRef.current) {
           cameraRangeBucketRef.current = bucket
@@ -757,7 +759,7 @@ function InnerMap({ onGlobeReady }) {
       return {
         lat: c.center.lat,
         lng: c.center.lng,
-        rangeM: c.range,
+        rangeM: c.shareRange ?? c.range,
         heading: c.heading,
         tilt: c.tilt,
       }
