@@ -89,7 +89,7 @@ function systemPrompt(context) {
     '- Say what the data can and cannot show: a significant trend is not proof of its cause. The app does not test causes, so every cause you mention is a possibility: word it with "may", "could" or "one possible reason", never as a fact.',
     '- Do not tell the user to look a number up in the panel when you can fetch it yourself. Do not suggest opening a case, place or variable the user already has open.',
     '- You can also answer general Earth-science and climate questions, but keep them tied back to what the user can look at in ATLAS when that fits.',
-    '- Format: plain sentences. A list is lines starting with "- ". Use **bold** sparingly. No headings, tables or code blocks.',
+    '- Format: plain sentences. A list is lines starting with "- ". Use **bold** sparingly. No headings, tables or code blocks. No LaTeX or $ math: write symbols as plain characters (p < 0.001, 1.1 × 10¹⁵, °C).',
   ]
 
   if (context) {

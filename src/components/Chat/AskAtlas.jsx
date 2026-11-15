@@ -15,6 +15,7 @@ import { ArrowUp, RotateCcw, Sparkles, Square, X } from 'lucide-react'
 import { useAtlasStore } from '../../store/atlasStore'
 import { useTrend, useTrendScan } from '../../hooks/useNasaPower'
 import { buildChatContext, suggestedQuestions } from '../../services/chat/chatContext.js'
+import { plainMath } from '../../services/chat/plainMath.js'
 import { POWER_VARIABLES } from '../../services/nasaPower/variables.js'
 import { seasonById } from '../../services/nasaPower/trendStats.js'
 import { demoPlaceLabel } from '../../services/nasaPower/demos.js'
@@ -39,11 +40,11 @@ function inline(text) {
   )
 }
 
-/** Paragraphs and "- " lists: all the formatting the model is asked to use. */
+/** Paragraphs and "- " lists: all the formatting the model is asked to use. Stray LaTeX math becomes plain text. */
 function RichText({ text }) {
   const blocks = []
   let list = null
-  for (const raw of text.split('\n')) {
+  for (const raw of plainMath(text).split('\n')) {
     const line = raw.trimEnd()
     const item = line.match(/^\s*[-*•]\s+(.*)$/)
     if (item) {
