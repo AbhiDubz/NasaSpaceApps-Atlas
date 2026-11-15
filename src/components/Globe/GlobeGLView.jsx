@@ -26,6 +26,7 @@ import {
 } from 'three'
 import * as solar from 'solar-calculator'
 import { useAtlasStore } from '../../store/atlasStore'
+import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
 import { isMobileDevice } from '../../config/qualityTiers'
 import { getTimezoneViewCenter } from '../../utils/geo'
 import {
@@ -230,6 +231,22 @@ function unitVecToLatLng(v) {
     return [lat, lng]
 }
 
+/**
+ * Screen point (client px) → { lat, lng } on the globe surface, or null off the globe.
+ * Raycasts now, at this exact pixel. (`globe.toGeoCoords` converts a 3D point, not
+ * screen pixels, and the click coords globe.gl hands out come from its last
+ * throttled hover check, which can be stale by the time the click lands.)
+ */
+function screenToGeo(globe, container, clientX, clientY) {
+    const rect = container.getBoundingClientRect()
+    try {
+        const geo = globe.toGlobeCoords?.(clientX - rect.left, clientY - rect.top)
+        return Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng) ? geo : null
+    } catch {
+        return null
+    }
+}
+
 /** Slightly under the tiles so it never z-fights with them (tile chords sag ~0.06 % at radius 100). */
 const TILE_BACKDROP_SCALE = 0.998
 
@@ -328,6 +345,8 @@ export default function GlobeGLView({ onGlobeReady }) {
     const [closeZoom, setCloseZoom] = useState(false)
     const satelliteTilesOn = closeZoom && !gibsImageryKey
     const terminatorOn = dataLayers?.terminator !== false
+    /** Trend Detective is open: outline its study region (Washington State). */
+    const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
     const windOn = dataLayers?.windOverlay === true
     const getWindFrame = useCallback((w, h) => globeGlWindFrame(globeRef.current, w, h), [])
 
@@ -613,52 +632,42 @@ export default function GlobeGLView({ onGlobeReady }) {
                 el.style.opacity = isVisible ? (el.dataset.baseOpacity || '1') : '0'
             })
 
-        // Track mouse position for hover tooltips + live lat/lng HUD
+        // Track mouse position for hover tooltips + live lat/lng HUD (one raycast per frame at most)
+        let hudFrame = 0
         const onPointerMove = (e) => {
             container._lastPointerX = e.clientX
             container._lastPointerY = e.clientY
-            const rect = container.getBoundingClientRect()
-            try {
-                const geo = globe.toGeoCoords?.({
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top,
-                })
-                if (Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng)) {
-                    applyCursorCoords(geo.lat, geo.lng)
-                } else {
-                    clearCursorCoords()
-                }
-            } catch {
-                clearCursorCoords()
-            }
+            if (hudFrame) return
+            hudFrame = requestAnimationFrame(() => {
+                hudFrame = 0
+                const geo = screenToGeo(globe, container, container._lastPointerX, container._lastPointerY)
+                if (geo) applyCursorCoords(geo.lat, geo.lng)
+                else clearCursorCoords()
+            })
         }
-        const onPointerLeave = () => clearCursorCoords()
+        const onPointerLeave = () => {
+            cancelAnimationFrame(hudFrame)
+            hudFrame = 0
+            clearCursorCoords()
+        }
         container.addEventListener('pointermove', onPointerMove)
         container.addEventListener('pointerleave', onPointerLeave)
 
         // ── Globe background click — dismiss selection / Street View ──
-        globe.onGlobeClick(({ lat, lng }) => {
-            applyGlobeMapClick({ lat, lng })
-        })
+        // Re-raycast at the click pixel: globe.gl's own coords can lag behind the pointer.
+        const globeClickAt = (ev, fallback) => {
+            const geo = (ev && screenToGeo(globe, container, ev.clientX, ev.clientY)) || fallback
+            if (Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng)) applyGlobeMapClick({ lat: geo.lat, lng: geo.lng })
+        }
+        globe.onGlobeClick((coords, ev) => globeClickAt(ev, coords))
 
         // ── Right-click country context menu (capture: avoid child swallow) ──
         const onContextMenu = (e) => {
             e.preventDefault()
             e.stopPropagation()
-            const rect = container.getBoundingClientRect()
-            let lat
-            let lng
-            try {
-                const geo = globe.toGeoCoords?.({
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top,
-                })
-                lat = geo?.lat
-                lng = geo?.lng
-            } catch {
-                /* toGeoCoords unavailable */
-            }
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+            const geo = screenToGeo(globe, container, e.clientX, e.clientY)
+            if (!geo) return
+            const { lat, lng } = geo
             applyGlobeMapContextMenu({
                 lat,
                 lng,
@@ -723,20 +732,17 @@ export default function GlobeGLView({ onGlobeReady }) {
             .polygonsTransitionDuration(600)
             // Storm cones remain non-interactive; country investigation is via right-click menu
             // A click on a polygon (country tint, storm cone) still counts as a click on the ground beneath it.
-            .onPolygonClick((_poly, _ev, coords) => {
-                if (Number.isFinite(coords?.lat) && Number.isFinite(coords?.lng)) {
-                    applyGlobeMapClick({ lat: coords.lat, lng: coords.lng })
-                }
-            })
+            .onPolygonClick((_poly, ev, coords) => globeClickAt(ev, coords))
 
         globe
             .pathsData([])
             .pathPoints('coords')
             .pathPointLat((p) => p[1])
             .pathPointLng((p) => p[0])
-            .pathColor(() => 'rgba(90, 210, 255, 0.82)')
-            .pathStroke(0.12)
-            .pathPointAlt(0.008)
+            .pathColor((d) => d.color || 'rgba(90, 210, 255, 0.82)')
+            .pathStroke((d) => d.stroke ?? 0.12)
+            // [lng, lat, alt?] — default ~50 km up; the region border hugs the ground
+            .pathPointAlt((p) => p[2] ?? 0.008)
 
         globeRef.current = globe
 
@@ -788,6 +794,7 @@ export default function GlobeGLView({ onGlobeReady }) {
             window.removeEventListener('resize', onResize)
             container.removeEventListener('pointerdown', stopRotate)
             container.removeEventListener('wheel', stopRotate)
+            cancelAnimationFrame(hudFrame)
             container.removeEventListener('pointermove', onPointerMove)
             container.removeEventListener('pointerleave', onPointerLeave)
             container.removeEventListener('contextmenu', onContextMenu, true)
@@ -842,8 +849,14 @@ export default function GlobeGLView({ onGlobeReady }) {
         const globe = globeRef.current
         if (!globe) return
         const syncPaths = () => {
-            /** @type {{ coords: number[][] }[]} */
+            /** @type {{ coords: number[][], color?: string, stroke?: number }[]} */
             const paths = []
+            if (trendRegionOn) {
+                for (const ring of REGION_OUTLINE) {
+                    // Fat-line stroke is in screen pixels here (three-globe Line2, worldUnits off)
+                    paths.push({ coords: ring.map(([x, y]) => [x, y, 0.0012]), color: REGION_OUTLINE_COLOR, stroke: 2.5 })
+                }
+            }
             if (terminatorOn) {
                 const ring = buildTerminatorRing(new Date())
                 paths.push({ coords: ring.map((p) => [p.lng, p.lat]) })
@@ -858,7 +871,7 @@ export default function GlobeGLView({ onGlobeReady }) {
         syncPaths()
         const id = setInterval(syncPaths, 60_000)
         return () => clearInterval(id)
-    }, [terminatorOn, stormOverlays])
+    }, [terminatorOn, stormOverlays, trendRegionOn])
 
     // ── Marker view-model sync ──
     useEffect(() => {

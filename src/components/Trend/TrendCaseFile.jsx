@@ -4,7 +4,7 @@
  * Note: index.css has an unlayered `* { margin: 0; padding: 0 }` reset that
  * outranks Tailwind's layered utilities, so spacing classes here carry `!`.
  *
- * Click anywhere on the globe → pick a variable → see the monthly record,
+ * Click anywhere in Washington State (the study region) → pick a variable → see the monthly record,
  * the same record with the seasons removed, the fitted trend, and a
  * plain-language verdict backed by a Mann-Kendall test.
  */
@@ -23,7 +23,8 @@ import {
 } from '../../services/nasaPower/variables.js'
 import { TREND_DEMOS, demoPlaceLabel } from '../../services/nasaPower/demos.js'
 import { fmtP } from '../../services/nasaPower/trendStats.js'
-import { GlobalNewsTips, PlaceNewsTips } from './NewsTips'
+import { OUTSIDE_REGION_MESSAGE, REGION_BBOX, REGION_NAME } from '../../services/nasaPower/region.js'
+import { PlaceNewsTips, RegionNewsTips } from './NewsTips'
 
 const PLACE_COLORS = ['#38bdf8', '#fb923c']
 const TREND_COLOR = '#facc15'
@@ -175,7 +176,7 @@ function CaseSection({ place, variable, color, compact, onRemove }) {
         </p>
       ) : error ? (
         <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3! py-3! text-sm leading-normal text-red-200" role="alert">
-          {error} Try another spot, or one of the saved cases.
+          {error} Try another spot in Washington, or one of the saved cases.
         </p>
       ) : data ? (
         <>
@@ -231,14 +232,24 @@ function CaseSection({ place, variable, color, compact, onRemove }) {
   )
 }
 
+/** Frame the whole study region. */
+function flyToRegion(flyToLocation) {
+  const b = REGION_BBOX
+  flyToLocation({ lat: (b.north + b.south) / 2, lng: (b.east + b.west) / 2, bbox: b })
+}
+
 export function TrendLauncher() {
   const open = useAtlasStore((s) => Boolean(s.trendCase))
   const openTrendCase = useAtlasStore((s) => s.openTrendCase)
+  const flyToLocation = useAtlasStore((s) => s.flyToLocation)
   if (open) return null
   return (
     <button
       type="button"
-      onClick={() => openTrendCase()}
+      onClick={() => {
+        openTrendCase()
+        flyToRegion(flyToLocation)
+      }}
       className={cn(BTN, 'fixed right-4 bottom-14 z-40 border-accent-border bg-[rgba(3,7,18,0.94)] px-5! py-2.5! text-base text-accent shadow-xl')}
     >
       <Search className="h-5 w-5" />
@@ -255,7 +266,7 @@ export default function TrendCaseFile() {
   const flyToLocation = useAtlasStore((s) => s.flyToLocation)
 
   if (!trendCase) return null
-  const { places, variable, theme, pickingCompare } = trendCase
+  const { places, variable, theme, pickingCompare, outsideClick } = trendCase
   const meta = POWER_VARIABLES[variable] || POWER_VARIABLES.T2M
   const options = theme ? variablesForTheme(theme) : POWER_VARIABLE_CODES.map((c) => POWER_VARIABLES[c])
   const comparing = places.length > 1
@@ -268,8 +279,12 @@ export default function TrendCaseFile() {
 
   const openDemo = (demo) => {
     openTrendCase({ places: demo.places, variable: demo.variable, theme: POWER_VARIABLES[demo.variable].theme })
+    if (demo.places.length > 1) {
+      flyToRegion(flyToLocation)
+      return
+    }
     const p = demo.places[0]
-    const half = demo.places.length > 1 ? 28 : 5
+    const half = 1.5
     flyToLocation({
       lat: p.lat,
       lng: p.lng,
@@ -284,7 +299,10 @@ export default function TrendCaseFile() {
     >
       <header className="flex items-center gap-2 border-b border-line px-4! py-2!">
         <Search className="h-5 w-5 text-accent" aria-hidden="true" />
-        <h2 className="flex-1 text-lg font-semibold leading-normal text-text">Trend Detective</h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-semibold leading-normal text-text">Trend Detective</h2>
+          <p className="text-sm text-muted">{REGION_NAME}</p>
+        </div>
         <button type="button" className={cn(BTN, BTN_IDLE)} onClick={closeTrendCase} aria-label="Close case file">
           <X className="h-4 w-4" />
         </button>
@@ -331,11 +349,16 @@ export default function TrendCaseFile() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-semibold text-text">3. Where?</p>
+          <p className="text-sm font-semibold text-text">3. Where in {REGION_NAME}?</p>
+          {outsideClick ? (
+            <p className="rounded-lg border border-amber-300/40 bg-amber-400/10 px-3! py-2! text-sm leading-normal text-amber-100" role="status">
+              {formatCoords(outsideClick.lat, outsideClick.lng)} is outside the study region. {OUTSIDE_REGION_MESSAGE}
+            </p>
+          ) : null}
           {places.length === 0 ? (
             <p className="flex items-center gap-2 rounded-lg border border-dashed border-accent-border bg-accent-dim px-3! py-3! text-sm leading-normal text-text">
               <MapPin className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              Click any spot on the globe to open its case, or start with a saved case below.
+              Click any spot in Washington to open its case, or start with a saved case below.
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
@@ -346,15 +369,15 @@ export default function TrendCaseFile() {
                 onClick={() => updateTrendCase({ pickingCompare: !pickingCompare })}
               >
                 <GitCompareArrows className="h-4 w-4" />
-                {pickingCompare ? 'Now click a second place…' : comparing ? 'Change second place' : 'Compare with another place'}
+                {pickingCompare ? 'Now click a second place in Washington…' : comparing ? 'Change second place' : 'Compare with another place'}
               </button>
-              {!pickingCompare ? <p className="text-sm text-muted">or click the globe for a new case</p> : null}
+              {!pickingCompare ? <p className="text-sm text-muted">or click elsewhere in Washington for a new case</p> : null}
             </div>
           )}
         </div>
 
         {places.length === 0 ? (
-          <GlobalNewsTips
+          <RegionNewsTips
             onOpen={(tip) => {
               openTrendCase({
                 places: [{ lat: tip.lat, lng: tip.lng, label: tip.label }],
@@ -366,7 +389,6 @@ export default function TrendCaseFile() {
           />
         ) : (
           <PlaceNewsTips
-            place={places[places.length - 1]}
             variable={meta.code}
             onPickVariable={(code) => updateTrendCase({ variable: code, theme: null })}
           />

@@ -22,6 +22,7 @@ import {
 } from '../core/investigationPersistence'
 import { eventToEvidence } from '../core/investigationSchema'
 import { eventToWorkspaceEventRow } from '../core/workspaceMatch'
+import { isInRegion } from '../services/nasaPower/region.js'
 const STORAGE_KEY_SOURCES = 'atlas_selected_sources'
 const STORAGE_KEY_ONBOARDED = 'atlas_onboarded'
 /** One-time: expand legacy curated source lists to the full catalog default. */
@@ -792,8 +793,10 @@ export const useAtlasStore = create((set, get) => ({
 
   // ── Trend Detective case file ──
   /**
-   * `{ places: [{lat,lng,label?}, …up to 2], variable, theme, pickingCompare }`
+   * `{ places: [{lat,lng,label?}, …up to 2], variable, theme, pickingCompare, outsideClick }`
    * or null when the panel is closed. `places` may be empty (guided start).
+   * Places are limited to Washington State; `outsideClick` holds the last
+   * click that fell outside it, so the panel can say why nothing happened.
    */
   trendCase: null,
   openTrendCase: (init = {}) => set((s) => ({
@@ -802,16 +805,33 @@ export const useAtlasStore = create((set, get) => ({
       variable: init.variable || s.trendCase?.variable || 'T2M',
       theme: init.theme !== undefined ? init.theme : s.trendCase?.theme ?? null,
       pickingCompare: false,
+      outsideClick: null,
     },
   })),
   closeTrendCase: () => set({ trendCase: null }),
-  updateTrendCase: (patch) => set((s) => (s.trendCase ? { trendCase: { ...s.trendCase, ...patch } } : {})),
-  /** A globe click: fills the compare slot when armed, otherwise starts a new case. */
+  updateTrendCase: (patch) => set((s) => (
+    s.trendCase ? { trendCase: { ...s.trendCase, outsideClick: null, ...patch } } : {}
+  )),
+  /**
+   * A globe click: fills the compare slot when armed, otherwise starts a new case.
+   * Clicks outside Washington keep the current case and leave a notice.
+   */
   pickTrendPlace: ({ lat, lng, label }) => set((s) => {
     const cur = s.trendCase
+    if (!isInRegion(lat, lng)) {
+      return {
+        trendCase: {
+          places: cur?.places || [],
+          variable: cur?.variable || 'T2M',
+          theme: cur?.theme ?? null,
+          pickingCompare: cur?.pickingCompare || false,
+          outsideClick: { lat, lng },
+        },
+      }
+    }
     const place = { lat, lng, label: label || null }
     if (cur?.pickingCompare && cur.places.length) {
-      return { trendCase: { ...cur, places: [cur.places[0], place], pickingCompare: false } }
+      return { trendCase: { ...cur, places: [cur.places[0], place], pickingCompare: false, outsideClick: null } }
     }
     return {
       trendCase: {
@@ -819,6 +839,7 @@ export const useAtlasStore = create((set, get) => ({
         variable: cur?.variable || 'T2M',
         theme: cur?.theme ?? null,
         pickingCompare: false,
+        outsideClick: null,
       },
     }
   }),

@@ -48,6 +48,7 @@ import { buildGdeltDocQuery } from '../../services/gdelt/analyticsService'
 import useShareCameraBridge from '../../hooks/useShareCameraBridge'
 import { PLACE_SEARCH_PIN_SRC } from '../../constants/placeSearchPin'
 import { buildTerminatorRing } from '../../core/solarTerminator'
+import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
 import Model3D from './Model3D'
 import WindParticleOverlay from './WindParticleOverlay'
 import { map3dWindFrame } from '../../globe-core/windFrames'
@@ -186,9 +187,12 @@ function truncatePlaceLabel(s, maxLen = 72) {
   return t.length <= maxLen ? t : `${t.slice(0, maxLen - 1)}…`
 }
 
-function Polyline3D({ coordinates, strokeColor, strokeWidth, outerColor, outerWidth }) {
+/** Washington State border, as Polyline3D coordinates (draped on the terrain when drawn). */
+const TREND_REGION_RINGS = REGION_OUTLINE.map((ring) => ring.map(([lng, lat]) => ({ lat, lng })))
+
+function Polyline3D({ coordinates, strokeColor, strokeWidth, outerColor, outerWidth, altitudeMode = AltitudeMode.ABSOLUTE }) {
   return createElement('gmp-polyline-3d', {
-    altitudeMode: AltitudeMode.ABSOLUTE,
+    altitudeMode,
     strokeColor,
     strokeWidth,
     outerColor,
@@ -292,6 +296,8 @@ function InnerMap({ onGlobeReady }) {
 
   const dataLayers = useAtlasStore((s) => s.dataLayers)
   const terminatorOn = dataLayers?.terminator !== false
+  /** Trend Detective is open: outline its study region (Washington State). */
+  const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
   const windOn = dataLayers?.windOverlay === true
   /** Camera snapshot for the wind overlay, read straight off the map element so it tracks fly-to animations. */
   const getWindFrame = useCallback((width, height) => {
@@ -1035,6 +1041,21 @@ function InnerMap({ onGlobeReady }) {
             strokeWidth={1.5}
           />
         )}
+
+        {vectorLayersReady &&
+          trendRegionOn &&
+          TREND_REGION_RINGS.map((ring, idx) => (
+            <Polyline3D
+              key={`trend-region-ring-${idx}`}
+              coordinates={ring}
+              altitudeMode={AltitudeMode.CLAMP_TO_GROUND}
+              strokeColor={REGION_OUTLINE_COLOR}
+              strokeWidth={4}
+              // outerWidth is a fraction (0–1) of strokeWidth: a thin dark edge for contrast
+              outerColor="rgba(0, 0, 0, 0.45)"
+              outerWidth={0.3}
+            />
+          ))}
 
         {vectorLayersReady &&
           searchHighlightRings?.rings.map((ring, idx) => (

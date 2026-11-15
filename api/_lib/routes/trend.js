@@ -1,5 +1,5 @@
 /**
- * GET /api/trend?lat=..&lng=..&var=T2M
+ * GET /api/trend?lat=..&lng=..&var=T2M  (Washington State points only)
  * Deseasonalized trend test for one NASA POWER variable at one point:
  * Sen's slope per decade, Mann-Kendall (Hamed-Rao) p-value, OLS cross-check.
  */
