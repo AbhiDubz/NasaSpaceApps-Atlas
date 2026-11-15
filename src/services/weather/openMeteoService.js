@@ -13,15 +13,22 @@ const WMO_LABELS = {
   51: 'Light drizzle',
   53: 'Drizzle',
   55: 'Heavy drizzle',
+  56: 'Freezing drizzle',
+  57: 'Freezing drizzle',
   61: 'Light rain',
   63: 'Rain',
   65: 'Heavy rain',
+  66: 'Freezing rain',
+  67: 'Freezing rain',
   71: 'Light snow',
   73: 'Snow',
   75: 'Heavy snow',
+  77: 'Snow grains',
   80: 'Rain showers',
   81: 'Rain showers',
   82: 'Violent rain showers',
+  85: 'Snow showers',
+  86: 'Heavy snow showers',
   95: 'Thunderstorm',
   96: 'Thunderstorm with hail',
   99: 'Thunderstorm with hail',
@@ -85,4 +92,40 @@ export async function fetchLocalWeather({ lat, lng, signal } = {}) {
     precipMm: Number.isFinite(cur.precipitation) ? cur.precipitation : null,
     observedAt: cur.time || null,
   }
+}
+
+/**
+ * Current conditions for many points in one Open-Meteo request.
+ * @param {{ points: Array<{ lat: number, lng: number }>, signal?: AbortSignal }} opts
+ * @returns {Promise<Array<{
+ *   temperatureC: number | null,
+ *   windKmh: number | null,
+ *   weatherCode: number | null,
+ *   weatherLabel: string,
+ *   isDay: boolean | null,
+ * }>>} one entry per input point, in order
+ */
+export async function fetchCitiesWeather({ points, signal } = {}) {
+  if (!Array.isArray(points) || points.length === 0) return []
+  const params = new URLSearchParams({
+    latitude: points.map((p) => p.lat).join(','),
+    longitude: points.map((p) => p.lng).join(','),
+    current: 'temperature_2m,weather_code,wind_speed_10m,is_day',
+    wind_speed_unit: 'kmh',
+    timezone: 'auto',
+  })
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal })
+  if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`)
+  const json = await res.json()
+  const list = Array.isArray(json) ? json : [json]
+  return list.map((loc) => {
+    const cur = loc?.current || {}
+    return {
+      temperatureC: Number.isFinite(cur.temperature_2m) ? cur.temperature_2m : null,
+      windKmh: Number.isFinite(cur.wind_speed_10m) ? cur.wind_speed_10m : null,
+      weatherCode: Number.isFinite(cur.weather_code) ? cur.weather_code : null,
+      weatherLabel: wmoLabel(cur.weather_code),
+      isDay: cur.is_day == null ? null : cur.is_day === 1,
+    }
+  })
 }
