@@ -19,15 +19,32 @@ function readBody(req) {
   })
 }
 
-/** @param {import('http').IncomingMessage} req @param {import('http').ServerResponse} res @param {Response} response */
+/**
+ * Pipes the body through as it arrives, so streamed replies (/api/chat) reach
+ * the browser chunk by chunk instead of all at once.
+ * @param {import('http').IncomingMessage} req @param {import('http').ServerResponse} res @param {Response} response
+ */
 async function sendWebResponse(req, res, response) {
   res.statusCode = response.status
   response.headers.forEach((value, key) => {
     if (key.toLowerCase() === 'transfer-encoding') return
     res.setHeader(key, value)
   })
-  const buf = Buffer.from(await response.arrayBuffer())
-  res.end(buf)
+  if (!response.body) {
+    res.end()
+    return
+  }
+  const reader = response.body.getReader()
+  // Stop reading upstream if the browser goes away mid-stream.
+  res.on('close', () => {
+    if (!res.writableEnded) reader.cancel().catch(() => {})
+  })
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    res.write(Buffer.from(value))
+  }
+  res.end()
 }
 
 /** @param {import('http').IncomingMessage} req */
@@ -82,6 +99,7 @@ const DEV_API_ROUTES = [
   route('contact', { methods: ['POST', 'OPTIONS'] }),
   route('nasa-power', { methods: ['GET', 'OPTIONS'] }),
   route('trend', { methods: ['GET', 'OPTIONS'] }),
+  route('chat', { methods: ['POST', 'OPTIONS'] }),
   route('export-report', { methods: ['POST', 'OPTIONS'], style: 'node' }),
   route('export-report-status', { methods: ['GET', 'OPTIONS'], style: 'node' }),
 ]

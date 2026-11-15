@@ -17,7 +17,7 @@
  */
 import { useMemo } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { GitCompareArrows, MapPin, Minus, Search, TrendingDown, TrendingUp, X } from 'lucide-react'
+import { GitCompareArrows, MapPin, Minus, Search, Sparkles, TrendingDown, TrendingUp, X } from 'lucide-react'
 import { useAtlasStore } from '../../store/atlasStore'
 import { useTrend } from '../../hooks/useNasaPower'
 import { cn } from '../../lib/utils'
@@ -438,7 +438,7 @@ export function TrendLauncher() {
         openTrendCase()
         flyToRegion(flyToLocation)
       }}
-      className={cn(BTN, 'fixed right-4 bottom-14 z-40 border-accent-border bg-[rgba(3,7,18,0.94)] px-5! py-2.5! text-base text-accent shadow-xl')}
+      className={cn(BTN, 'border-accent-border bg-[rgba(3,7,18,0.94)] px-5! py-2.5! text-base text-accent shadow-xl')}
     >
       <Search className="h-5 w-5" />
       Trend Detective
@@ -452,6 +452,8 @@ export default function TrendCaseFile() {
   const updateTrendCase = useAtlasStore((s) => s.updateTrendCase)
   const openTrendCase = useAtlasStore((s) => s.openTrendCase)
   const flyToLocation = useAtlasStore((s) => s.flyToLocation)
+  const askOpen = useAtlasStore((s) => s.askAtlasOpen)
+  const openAskAtlas = useAtlasStore((s) => s.openAskAtlas)
 
   if (!trendCase) return null
   const { places, variable, theme, pickingCompare, outsideClick } = trendCase
@@ -498,6 +500,15 @@ export default function TrendCaseFile() {
           <h2 className="text-lg font-semibold leading-normal text-text">Trend Detective</h2>
           <p className="text-sm text-muted">{REGION_NAME}</p>
         </div>
+        <button
+          type="button"
+          aria-pressed={askOpen}
+          className={cn(BTN, askOpen ? BTN_ACTIVE : BTN_IDLE)}
+          onClick={openAskAtlas}
+        >
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          Ask
+        </button>
         <button type="button" className={cn(BTN, BTN_IDLE)} onClick={closeTrendCase} aria-label="Close case file">
           <X className="h-4 w-4" />
         </button>

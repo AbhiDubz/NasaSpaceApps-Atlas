@@ -33,6 +33,7 @@ const WEB_ROUTES = {
   contact: () => import('./_lib/routes/contact.js'),
   'nasa-power': () => import('./_lib/routes/nasa-power.js'),
   trend: () => import('./_lib/routes/trend.js'),
+  chat: () => import('./_lib/routes/chat.js'),
 }
 
 export const config = {
