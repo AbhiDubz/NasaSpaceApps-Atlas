@@ -22,10 +22,11 @@ import {
     DirectionalLight, AmbientLight, HemisphereLight,
     Sprite, SpriteMaterial, CanvasTexture,
     AdditiveBlending, Color,
-    MeshBasicMaterial,
+    MeshBasicMaterial, Mesh,
 } from 'three'
 import * as solar from 'solar-calculator'
 import { useAtlasStore } from '../../store/atlasStore'
+import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
 import { isMobileDevice } from '../../config/qualityTiers'
 import { getTimezoneViewCenter } from '../../utils/geo'
 import {
@@ -41,6 +42,7 @@ import {
     isSpriteArchetype,
     isTrackArchetype,
 } from '../../globe-core'
+import { globeGlWindFrame } from '../../globe-core/windFrames'
 import { activeGibsImageryKey, gibsTileEngineUrlForKey } from '../../config/gibsBasemap'
 import { buildTerminatorRing } from '../../core/solarTerminator'
 import { showDetectionLabel as getDetectionLabel } from '../../core/detectionLabels'
@@ -48,9 +50,21 @@ import WindParticleOverlay from './WindParticleOverlay'
 import HazardHeroOverlay from './HazardHeroOverlay'
 
 // Textures (CDN)
-const EARTH_DAY = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-day.jpg'
+// 4096×2048 Blue Marble — earth-day.jpg is only 1600×800 and looks soft on hi-dpi screens
+const EARTH_DAY = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg'
 const EARTH_NIGHT = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg'
 const EARTH_BUMP = 'https://unpkg.com/three-globe/example/img/earth-topology.png'
+/**
+ * Close-zoom satellite basemap (Esri World Imagery, free with attribution).
+ * A single 4096px texture goes soft near the surface, so below
+ * SATELLITE_TILES_ON_ALT (in globe radii) the globe streams slippy tiles instead.
+ */
+const SATELLITE_TILE_URL = (x, y, l) =>
+    `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${l}/${y}/${x}`
+const SATELLITE_TILES_ATTRIBUTION = 'Imagery © Esri, Maxar, Earthstar Geographics'
+const SATELLITE_TILES_ON_ALT = 0.45
+/** Higher than the "on" altitude so the basemap does not flicker at the boundary. */
+const SATELLITE_TILES_OFF_ALT = 0.6
 const BG_IMG = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/night-sky.png'
 
 const POINT_ALTITUDE = 0.01
@@ -217,6 +231,57 @@ function unitVecToLatLng(v) {
     return [lat, lng]
 }
 
+/**
+ * Screen point (client px) → { lat, lng } on the globe surface, or null off the globe.
+ * Raycasts now, at this exact pixel. (`globe.toGeoCoords` converts a 3D point, not
+ * screen pixels, and the click coords globe.gl hands out come from its last
+ * throttled hover check, which can be stale by the time the click lands.)
+ */
+function screenToGeo(globe, container, clientX, clientY) {
+    const rect = container.getBoundingClientRect()
+    try {
+        const geo = globe.toGlobeCoords?.(clientX - rect.left, clientY - rect.top)
+        return Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng) ? geo : null
+    } catch {
+        return null
+    }
+}
+
+/** Slightly under the tiles so it never z-fights with them (tile chords sag ~0.06 % at radius 100). */
+const TILE_BACKDROP_SCALE = 0.998
+
+/**
+ * three-globe hides its globe mesh as soon as a tile URL is set, so the globe is black
+ * until tiles stream in. Keep a copy of the globe (same geometry and day/night material)
+ * just beneath the tile layer so the textured globe shows through while tiles load.
+ */
+function setTileBackdropVisible(globe, visible) {
+    let globeGroup = null
+    globe.scene()?.traverse((o) => {
+        if (!globeGroup && Object.prototype.hasOwnProperty.call(o, '__globeObjType') && o.__globeObjType === 'globe') {
+            globeGroup = o
+        }
+    })
+    if (!globeGroup) return
+    let backdrop = globeGroup.__atlasTileBackdrop
+    if (!backdrop) {
+        if (!visible) return
+        const globeMesh = globeGroup.children.find((c) => c.isMesh)
+        if (!globeMesh) return
+        backdrop = new Mesh(globeMesh.geometry, globeMesh.material)
+        backdrop.rotation.copy(globeMesh.rotation)
+        backdrop.scale.setScalar(TILE_BACKDROP_SCALE)
+        // Follow later geometry / material swaps (the day/night shader loads asynchronously)
+        backdrop.onBeforeRender = () => {
+            backdrop.geometry = globeMesh.geometry
+            backdrop.material = globeMesh.material
+        }
+        globeGroup.add(backdrop)
+        globeGroup.__atlasTileBackdrop = backdrop
+    }
+    backdrop.visible = visible
+}
+
 export default function GlobeGLView({ onGlobeReady }) {
     const containerRef = useRef(null)
     const globeRef = useRef(null)
@@ -226,6 +291,8 @@ export default function GlobeGLView({ onGlobeReady }) {
     const idleTimerRef = useRef(null)
     const animFrameRef = useRef(null)
     const lastZoomStoreEmitRef = useRef(0)
+    /** Last tile source the engine loaded, so its cache is only dropped when the source changes. */
+    const lastTileSourceRef = useRef(null)
 
     const dataLayers = useAtlasStore((s) => s.dataLayers)
     const tacticalMode = useAtlasStore((s) => s.tacticalMode)
@@ -275,8 +342,13 @@ export default function GlobeGLView({ onGlobeReady }) {
     const setZoomLevel = useAtlasStore((s) => s.setZoomLevel)
 
     const gibsImageryKey = activeGibsImageryKey(dataLayers)
+    const [closeZoom, setCloseZoom] = useState(false)
+    const satelliteTilesOn = closeZoom && !gibsImageryKey
     const terminatorOn = dataLayers?.terminator !== false
+    /** Trend Detective is open: outline its study region (Washington State). */
+    const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
     const windOn = dataLayers?.windOverlay === true
+    const getWindFrame = useCallback((w, h) => globeGlWindFrame(globeRef.current, w, h), [])
 
     useShareCameraBridge({
         ready: globeReady,
@@ -425,6 +497,11 @@ export default function GlobeGLView({ onGlobeReady }) {
             ]).then(([dayTex, nightTex]) => {
                 if (destroyed) return
 
+                // Keep the surface crisp towards the limb, where it is seen at a grazing angle
+                const maxAniso = globe.renderer?.()?.capabilities?.getMaxAnisotropy?.() || 1
+                dayTex.anisotropy = maxAniso
+                nightTex.anisotropy = maxAniso
+
                 const material = new ShaderMaterial({
                     uniforms: {
                         dayTexture: { value: dayTex },
@@ -555,52 +632,42 @@ export default function GlobeGLView({ onGlobeReady }) {
                 el.style.opacity = isVisible ? (el.dataset.baseOpacity || '1') : '0'
             })
 
-        // Track mouse position for hover tooltips + live lat/lng HUD
+        // Track mouse position for hover tooltips + live lat/lng HUD (one raycast per frame at most)
+        let hudFrame = 0
         const onPointerMove = (e) => {
             container._lastPointerX = e.clientX
             container._lastPointerY = e.clientY
-            const rect = container.getBoundingClientRect()
-            try {
-                const geo = globe.toGeoCoords?.({
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top,
-                })
-                if (Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng)) {
-                    applyCursorCoords(geo.lat, geo.lng)
-                } else {
-                    clearCursorCoords()
-                }
-            } catch {
-                clearCursorCoords()
-            }
+            if (hudFrame) return
+            hudFrame = requestAnimationFrame(() => {
+                hudFrame = 0
+                const geo = screenToGeo(globe, container, container._lastPointerX, container._lastPointerY)
+                if (geo) applyCursorCoords(geo.lat, geo.lng)
+                else clearCursorCoords()
+            })
         }
-        const onPointerLeave = () => clearCursorCoords()
+        const onPointerLeave = () => {
+            cancelAnimationFrame(hudFrame)
+            hudFrame = 0
+            clearCursorCoords()
+        }
         container.addEventListener('pointermove', onPointerMove)
         container.addEventListener('pointerleave', onPointerLeave)
 
         // ── Globe background click — dismiss selection / Street View ──
-        globe.onGlobeClick(({ lat, lng }) => {
-            applyGlobeMapClick({ lat, lng })
-        })
+        // Re-raycast at the click pixel: globe.gl's own coords can lag behind the pointer.
+        const globeClickAt = (ev, fallback) => {
+            const geo = (ev && screenToGeo(globe, container, ev.clientX, ev.clientY)) || fallback
+            if (Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng)) applyGlobeMapClick({ lat: geo.lat, lng: geo.lng })
+        }
+        globe.onGlobeClick((coords, ev) => globeClickAt(ev, coords))
 
         // ── Right-click country context menu (capture: avoid child swallow) ──
         const onContextMenu = (e) => {
             e.preventDefault()
             e.stopPropagation()
-            const rect = container.getBoundingClientRect()
-            let lat
-            let lng
-            try {
-                const geo = globe.toGeoCoords?.({
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top,
-                })
-                lat = geo?.lat
-                lng = geo?.lng
-            } catch {
-                /* toGeoCoords unavailable */
-            }
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+            const geo = screenToGeo(globe, container, e.clientX, e.clientY)
+            if (!geo) return
+            const { lat, lng } = geo
             applyGlobeMapContextMenu({
                 lat,
                 lng,
@@ -665,20 +732,17 @@ export default function GlobeGLView({ onGlobeReady }) {
             .polygonsTransitionDuration(600)
             // Storm cones remain non-interactive; country investigation is via right-click menu
             // A click on a polygon (country tint, storm cone) still counts as a click on the ground beneath it.
-            .onPolygonClick((_poly, _ev, coords) => {
-                if (Number.isFinite(coords?.lat) && Number.isFinite(coords?.lng)) {
-                    applyGlobeMapClick({ lat: coords.lat, lng: coords.lng })
-                }
-            })
+            .onPolygonClick((_poly, ev, coords) => globeClickAt(ev, coords))
 
         globe
             .pathsData([])
             .pathPoints('coords')
             .pathPointLat((p) => p[1])
             .pathPointLng((p) => p[0])
-            .pathColor(() => 'rgba(90, 210, 255, 0.82)')
-            .pathStroke(0.12)
-            .pathPointAlt(0.008)
+            .pathColor((d) => d.color || 'rgba(90, 210, 255, 0.82)')
+            .pathStroke((d) => d.stroke ?? 0.12)
+            // [lng, lat, alt?] — default ~50 km up; the region border hugs the ground
+            .pathPointAlt((p) => p[2] ?? 0.008)
 
         globeRef.current = globe
 
@@ -730,6 +794,7 @@ export default function GlobeGLView({ onGlobeReady }) {
             window.removeEventListener('resize', onResize)
             container.removeEventListener('pointerdown', stopRotate)
             container.removeEventListener('wheel', stopRotate)
+            cancelAnimationFrame(hudFrame)
             container.removeEventListener('pointermove', onPointerMove)
             container.removeEventListener('pointerleave', onPointerLeave)
             container.removeEventListener('contextmenu', onContextMenu, true)
@@ -764,22 +829,34 @@ export default function GlobeGLView({ onGlobeReady }) {
     useEffect(() => {
         const globe = globeRef.current
         if (!globe) return
-        if (gibsImageryKey) {
-            globe.globeTileEngineUrl(gibsTileEngineUrlForKey(gibsImageryKey))
-            globe.globeTileEngineClearCache?.()
-        } else {
-            globe.globeTileEngineUrl(null)
+        const source = gibsImageryKey ? `gibs:${gibsImageryKey}` : closeZoom ? 'satellite' : null
+        // Keep loaded tiles across zoom-in/zoom-out crossings so going back in shows them at once;
+        // only a different source needs a fresh cache.
+        if (source && lastTileSourceRef.current && lastTileSourceRef.current !== source) {
             globe.globeTileEngineClearCache?.()
         }
-    }, [gibsImageryKey])
+        if (source) lastTileSourceRef.current = source
+        globe.globeTileEngineUrl(
+            gibsImageryKey ? gibsTileEngineUrlForKey(gibsImageryKey) : closeZoom ? SATELLITE_TILE_URL : null,
+        )
+        setTileBackdropVisible(globe, !!source)
+        // Tiles are only requested when the camera moves — nudge it so a still view fills in
+        globe.controls()?.dispatchEvent({ type: 'change' })
+    }, [gibsImageryKey, closeZoom])
 
     // Solar terminator + NHC storm track paths
     useEffect(() => {
         const globe = globeRef.current
         if (!globe) return
         const syncPaths = () => {
-            /** @type {{ coords: number[][] }[]} */
+            /** @type {{ coords: number[][], color?: string, stroke?: number }[]} */
             const paths = []
+            if (trendRegionOn) {
+                for (const ring of REGION_OUTLINE) {
+                    // Fat-line stroke is in screen pixels here (three-globe Line2, worldUnits off)
+                    paths.push({ coords: ring.map(([x, y]) => [x, y, 0.0012]), color: REGION_OUTLINE_COLOR, stroke: 2.5 })
+                }
+            }
             if (terminatorOn) {
                 const ring = buildTerminatorRing(new Date())
                 paths.push({ coords: ring.map((p) => [p.lng, p.lat]) })
@@ -794,7 +871,7 @@ export default function GlobeGLView({ onGlobeReady }) {
         syncPaths()
         const id = setInterval(syncPaths, 60_000)
         return () => clearInterval(id)
-    }, [terminatorOn, stormOverlays])
+    }, [terminatorOn, stormOverlays, trendRegionOn])
 
     // ── Marker view-model sync ──
     useEffect(() => {
@@ -868,6 +945,10 @@ export default function GlobeGLView({ onGlobeReady }) {
         if (!globe) return
         const controls = globe.controls()
         const onZoom = () => {
+            const altitude = globe.pointOfView()?.altitude
+            if (altitude != null) {
+                setCloseZoom((on) => (on ? altitude < SATELLITE_TILES_OFF_ALT : altitude < SATELLITE_TILES_ON_ALT))
+            }
             const now = performance.now()
             if (now - lastZoomStoreEmitRef.current < 100) return
             lastZoomStoreEmitRef.current = now
@@ -889,7 +970,12 @@ export default function GlobeGLView({ onGlobeReady }) {
                 className={`absolute inset-0${tacticalMode ? ' atlas-tactical-mode' : ''}`}
                 style={{ cursor: 'grab', background: '#030712' }}
             />
-            <WindParticleOverlay enabled={windOn} />
+            <WindParticleOverlay enabled={windOn} getFrame={getWindFrame} />
+            {satelliteTilesOn && (
+                <div className="pointer-events-none absolute bottom-9 right-2 z-[2] rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-slate-300">
+                    {SATELLITE_TILES_ATTRIBUTION}
+                </div>
+            )}
             <HazardHeroOverlay
                 enabled={globeReady && heroSites.length > 0}
                 heroes={heroSites}

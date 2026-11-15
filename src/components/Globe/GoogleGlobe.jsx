@@ -41,12 +41,17 @@ import {
   approxLatLngUnderPointer,
   resolveFlyToTarget,
   geoJsonToOuterRings,
+  choroplethFillFade,
 } from '../../globe-core'
+import { choroplethColorToRgba } from '../../services/gdelt/geoService'
 import { buildGdeltDocQuery } from '../../services/gdelt/analyticsService'
 import useShareCameraBridge from '../../hooks/useShareCameraBridge'
 import { PLACE_SEARCH_PIN_SRC } from '../../constants/placeSearchPin'
 import { buildTerminatorRing } from '../../core/solarTerminator'
+import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
 import Model3D from './Model3D'
+import WindParticleOverlay from './WindParticleOverlay'
+import { map3dWindFrame } from '../../globe-core/windFrames'
 import { useHazardModelAnimator } from '../../hooks/useHazardModelAnimator'
 import { preloadHazardModels } from '../../core/hazardModelCatalog'
 import { resolveHazardModelScale, resolveHazardModelAltitudeM } from '../../core/environmentHazardEffects'
@@ -60,6 +65,8 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 
 const RANGE_MIN_M = 120
 const RANGE_MAX_M = 35_000_000
+/** Centre altitudes above this are a lifted camera, not terrain (Everest is under 9 km). */
+const LIFTED_CENTER_MIN_ALT_M = 100_000
 /** Min interval between zoom writes to the global store while the camera moves (keeps UI off the critical path). */
 const ZOOM_STORE_MIN_INTERVAL_MS = 100
 const INTRO_FROM_RANGE_M = 50_000_000
@@ -180,9 +187,12 @@ function truncatePlaceLabel(s, maxLen = 72) {
   return t.length <= maxLen ? t : `${t.slice(0, maxLen - 1)}…`
 }
 
-function Polyline3D({ coordinates, strokeColor, strokeWidth, outerColor, outerWidth }) {
+/** Washington State border, as Polyline3D coordinates (draped on the terrain when drawn). */
+const TREND_REGION_RINGS = REGION_OUTLINE.map((ring) => ring.map(([lng, lat]) => ({ lat, lng })))
+
+function Polyline3D({ coordinates, strokeColor, strokeWidth, outerColor, outerWidth, altitudeMode = AltitudeMode.ABSOLUTE }) {
   return createElement('gmp-polyline-3d', {
-    altitudeMode: AltitudeMode.ABSOLUTE,
+    altitudeMode,
     strokeColor,
     strokeWidth,
     outerColor,
@@ -286,6 +296,30 @@ function InnerMap({ onGlobeReady }) {
 
   const dataLayers = useAtlasStore((s) => s.dataLayers)
   const terminatorOn = dataLayers?.terminator !== false
+  /** Trend Detective is open: outline its study region (Washington State). */
+  const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
+  const windOn = dataLayers?.windOverlay === true
+  /** Camera snapshot for the wind overlay, read straight off the map element so it tracks fly-to animations. */
+  const getWindFrame = useCallback((width, height) => {
+    const el = map3dRef.current?.map3d
+    const cam = cameraRef.current
+    const center = literalLatLng(el?.center) || literalLatLng(cam.center)
+    if (!center) return null
+    const num = (v, fallback) => (Number.isFinite(Number(v)) && v != null ? Number(v) : fallback)
+    return map3dWindFrame(
+      {
+        centerLat: center.lat,
+        centerLng: center.lng,
+        centerAltM: num(el?.center?.altitude, 0),
+        rangeM: num(el?.range, cam.range ?? STARTUP_ORBIT_RANGE_M),
+        headingDeg: num(el?.heading, cam.heading ?? 0),
+        tiltDeg: num(el?.tilt, cam.tilt ?? 0),
+        fovDeg: num(el?.fov, undefined),
+      },
+      width,
+      height,
+    )
+  }, [])
   const [terminatorRing, setTerminatorRing] = useState(() =>
     buildTerminatorRing().map((p) => ({ ...p, altitude: 12000 })),
   )
@@ -400,8 +434,14 @@ function InnerMap({ onGlobeReady }) {
 
       const now = performance.now()
       if (typeof d.range === 'number') {
+        // Zoom, LOD and fly-to keep upstream's raw-range semantics (far out, Map3D reports
+        // range 0 with the centre lifted, which clamps to RANGE_MIN_M).
         const clamped = Math.max(RANGE_MIN_M, Math.min(RANGE_MAX_M, d.range))
         cameraRef.current.range = clamped
+        // Share links need the true distance, so fold the lifted centre height back in for them only.
+        const liftedM = readMap3dCenterLiteral(d.center ?? cameraRef.current.center)?.altitude
+        const effectiveRange = d.range + (liftedM > LIFTED_CENTER_MIN_ALT_M ? liftedM : 0)
+        cameraRef.current.shareRange = Math.max(RANGE_MIN_M, Math.min(RANGE_MAX_M, effectiveRange))
         const bucket = bucketCameraRangeM(clamped)
         if (bucket !== cameraRangeBucketRef.current) {
           cameraRangeBucketRef.current = bucket
@@ -725,7 +765,7 @@ function InnerMap({ onGlobeReady }) {
       return {
         lat: c.center.lat,
         lng: c.center.lng,
-        rangeM: c.range,
+        rangeM: c.shareRange ?? c.range,
         heading: c.heading,
         tilt: c.tilt,
       }
@@ -813,7 +853,9 @@ function InnerMap({ onGlobeReady }) {
   }, [searchHighlight])
 
   /** Choropleth VMs flattened to Map3D outer rings (capped for marker budget). */
+  const choroFillFade = Math.round(choroplethFillFade(cameraRangeM) * 10) / 10
   const choroPolygons = useMemo(() => {
+    const fillFade = choroFillFade
     const list = []
     for (const c of choropleth) {
       const rings = geoJsonToOuterRings(c.geometry)
@@ -821,13 +863,13 @@ function InnerMap({ onGlobeReady }) {
         list.push({
           key: `${c.key}-${j}`,
           ring: rings[j],
-          fill: c.fill,
+          fill: choroplethColorToRgba(c.fillColor, fillFade),
           stroke: c.stroke,
         })
       }
     }
     return list.slice(0, 220)
-  }, [choropleth])
+  }, [choropleth, choroFillFade])
 
   return (
     <div
@@ -999,6 +1041,21 @@ function InnerMap({ onGlobeReady }) {
             strokeWidth={1.5}
           />
         )}
+
+        {vectorLayersReady &&
+          trendRegionOn &&
+          TREND_REGION_RINGS.map((ring, idx) => (
+            <Polyline3D
+              key={`trend-region-ring-${idx}`}
+              coordinates={ring}
+              altitudeMode={AltitudeMode.CLAMP_TO_GROUND}
+              strokeColor={REGION_OUTLINE_COLOR}
+              strokeWidth={4}
+              // outerWidth is a fraction (0–1) of strokeWidth: a thin dark edge for contrast
+              outerColor="rgba(0, 0, 0, 0.45)"
+              outerWidth={0.3}
+            />
+          ))}
 
         {vectorLayersReady &&
           searchHighlightRings?.rings.map((ring, idx) => (
@@ -1353,6 +1410,7 @@ function InnerMap({ onGlobeReady }) {
         })}
       </Map3D>
       </div>
+      <WindParticleOverlay enabled={windOn && globeMapReady} getFrame={getWindFrame} />
     </div>
   )
 }

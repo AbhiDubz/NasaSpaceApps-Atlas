@@ -1,5 +1,5 @@
 /**
- * GET /api/nasa-power?lat=..&lng=..[&vars=T2M,SNODP]
+ * GET /api/nasa-power?lat=..&lng=..[&vars=T2M,SNODP]  (Washington State points only)
  * Clean monthly NASA POWER series, 1981–2025 ($0, no key).
  * "Month 13" yearly averages are dropped; -999 fill values become null.
  */

@@ -194,8 +194,8 @@ export const LAYER_CATALOG = {
   windOverlay: {
     label: 'Wind Particles',
     kind: 'field',
-    globeModes: ['globegl'],
-    globeModeNote: 'Globe.GL only — animated Open-Meteo wind field',
+    globeModes: ['cesium', 'globegl'],
+    globeModeNote: '3D globes only — animated Open-Meteo wind field',
     optIn: true,
   },
   referenceNuclear: {
@@ -235,6 +235,21 @@ export const HIDDEN_LAYER_KEYS = new Set(
 
 /** Always-on ticker feeds to stop polling: crypto prices / sentiment and conflict data. */
 export const HIDDEN_SOURCE_IDS = new Set(SHOW_ALL_LAYERS ? [] : ['coingecko', 'alt-fng', 'ucdp', 'acled'])
+
+/**
+ * Disaster pins (fires, quakes, storms) start switched off for the submission
+ * so the globe stays clean and clicks go to Trend Detective. Unlike the hidden
+ * layers above, they stay in Settings and can be switched back on.
+ */
+/**
+ * Added in the second pass: the news-tone country tint paints every country at
+ * ~50% opacity, which washes out the satellite imagery underneath.
+ */
+export const SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS = ['gdeltChoropleth']
+
+export const SUBMISSION_DEFAULT_OFF_LAYER_KEYS = SHOW_ALL_LAYERS
+  ? []
+  : ['firms', 'usgs', 'gdacs', 'eonet', 'nhcStorms', ...SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS]
 
 export function isLayerHidden(layerKey) {
   return HIDDEN_LAYER_KEYS.has(layerKey)

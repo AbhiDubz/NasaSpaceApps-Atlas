@@ -5,6 +5,7 @@
  */
 import { fetchPowerMonthly } from '../../src/services/nasaPower/fetchPower.js'
 import { normalizeLatLng, parseVarList } from '../../src/services/nasaPower/variables.js'
+import { isInRegion, OUTSIDE_REGION_MESSAGE, REGION_NAME } from '../../src/services/nasaPower/region.js'
 import { jsonResponse } from './proxyCommon.js'
 
 const TTL_MS = 24 * 60 * 60 * 1000
@@ -40,7 +41,7 @@ export async function loadPower(lat, lng, vars) {
   return { lat, lng, elevation: parts[0]?.elevation ?? null, months: parts[0]?.months ?? [], series }
 }
 
-/** Parse and validate `lat` / `lng` / variable list from a request URL. */
+/** Parse and validate `lat` / `lng` / variable list from a request URL. Points outside Washington are refused. */
 export function readPointQuery(req, varParam) {
   const url = new URL(req.url)
   const rawLat = url.searchParams.get('lat')
@@ -48,6 +49,9 @@ export function readPointQuery(req, varParam) {
   const point = rawLat == null || rawLng == null || rawLat === '' || rawLng === '' ? null : normalizeLatLng(rawLat, rawLng)
   if (!point) {
     return { error: jsonResponse(400, { error: 'lat (-90 to 90) and lng are required numbers' }) }
+  }
+  if (!isInRegion(point.lat, point.lng)) {
+    return { error: jsonResponse(400, { error: OUTSIDE_REGION_MESSAGE, region: REGION_NAME }) }
   }
   return { ...point, vars: parseVarList(url.searchParams.get(varParam)), rawVar: url.searchParams.get(varParam) }
 }

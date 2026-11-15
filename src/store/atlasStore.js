@@ -12,7 +12,7 @@ import {
   subscribeToGdeltAggregates,
   destroyEventBus,
 } from '../core/eventBus'
-import { isLayerToggleOn } from '../core/layerCatalog'
+import { isLayerToggleOn, SUBMISSION_DEFAULT_OFF_LAYER_KEYS, SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS } from '../core/layerCatalog'
 import { supabase } from '../services/supabase'
 import { resolveFocusBboxForIsoCodes } from '../core/workspaceMatch'
 import {
@@ -22,6 +22,7 @@ import {
 } from '../core/investigationPersistence'
 import { eventToEvidence } from '../core/investigationSchema'
 import { eventToWorkspaceEventRow } from '../core/workspaceMatch'
+import { isInRegion } from '../services/nasaPower/region.js'
 const STORAGE_KEY_SOURCES = 'atlas_selected_sources'
 const STORAGE_KEY_ONBOARDED = 'atlas_onboarded'
 /** One-time: expand legacy curated source lists to the full catalog default. */
@@ -57,7 +58,7 @@ const DEFAULT_DATA_LAYERS = {
   // ── field layers (aggregate surfaces) ──
   gdeltChoropleth: true, // GDELT per-country tone choropleth — the default monitor surface
   gdeltHeatmap: false,   // GDELT GEO PointHeatmap (noisy ghost dots; opt-in)
-  windOverlay: false,    // Open-Meteo wind particles (Globe.GL only)
+  windOverlay: false,    // Open-Meteo wind particles (3D globes only)
   // ── track layers (ambient live) ──
   adsb: false,           // OpenSky ADS-B aircraft — ambient eye candy, opt-in (Phase 6 audit)
   adsbMilitary: true,    // Military ICAO hex sub-filter (distinct sprite; applies when adsb is on)
@@ -87,7 +88,35 @@ const DATA_LAYERS_MIGRATION_KEY = 'atlas_data_layers_migration'
 const DATA_LAYERS_MIGRATION_VERSION = 'v6'
 const GIBS_IMAGERY_EXCLUSIVE_KEYS = ['gibsTrueColor', 'gibsFires', 'gibsAerosol', 'gibsDust', 'gibsClouds']
 
+for (const key of SUBMISSION_DEFAULT_OFF_LAYER_KEYS) DEFAULT_DATA_LAYERS[key] = false
+
+/**
+ * One-time switch-off of the submission's default-off layers for browsers that
+ * saved layer settings before it. Browsers already on v1 only get the layers
+ * added since, so anything the user switched back on stays on.
+ */
+const SUBMISSION_LAYERS_MIGRATION_KEY = 'atlas_trend_detective_layers'
+function applySubmissionLayerDefaults(layers) {
+  if (!SUBMISSION_DEFAULT_OFF_LAYER_KEYS.length) return layers
+  try {
+    const applied = localStorage.getItem(SUBMISSION_LAYERS_MIGRATION_KEY)
+    if (applied === 'v2') return layers
+    const keys = applied === 'v1' ? SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS : SUBMISSION_DEFAULT_OFF_LAYER_KEYS
+    const next = { ...layers }
+    for (const key of keys) next[key] = false
+    localStorage.setItem(STORAGE_KEY_DATA_LAYERS, JSON.stringify(next))
+    localStorage.setItem(SUBMISSION_LAYERS_MIGRATION_KEY, 'v2')
+    return next
+  } catch {
+    return layers
+  }
+}
+
 function loadDataLayers() {
+  return applySubmissionLayerDefaults(loadDataLayersRaw())
+}
+
+function loadDataLayersRaw() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_DATA_LAYERS)
     if (raw) {
@@ -764,8 +793,10 @@ export const useAtlasStore = create((set, get) => ({
 
   // ── Trend Detective case file ──
   /**
-   * `{ places: [{lat,lng,label?}, …up to 2], variable, theme, pickingCompare }`
+   * `{ places: [{lat,lng,label?}, …up to 2], variable, theme, pickingCompare, outsideClick }`
    * or null when the panel is closed. `places` may be empty (guided start).
+   * Places are limited to Washington State; `outsideClick` holds the last
+   * click that fell outside it, so the panel can say why nothing happened.
    */
   trendCase: null,
   openTrendCase: (init = {}) => set((s) => ({
@@ -774,16 +805,33 @@ export const useAtlasStore = create((set, get) => ({
       variable: init.variable || s.trendCase?.variable || 'T2M',
       theme: init.theme !== undefined ? init.theme : s.trendCase?.theme ?? null,
       pickingCompare: false,
+      outsideClick: null,
     },
   })),
   closeTrendCase: () => set({ trendCase: null }),
-  updateTrendCase: (patch) => set((s) => (s.trendCase ? { trendCase: { ...s.trendCase, ...patch } } : {})),
-  /** A globe click: fills the compare slot when armed, otherwise starts a new case. */
+  updateTrendCase: (patch) => set((s) => (
+    s.trendCase ? { trendCase: { ...s.trendCase, outsideClick: null, ...patch } } : {}
+  )),
+  /**
+   * A globe click: fills the compare slot when armed, otherwise starts a new case.
+   * Clicks outside Washington keep the current case and leave a notice.
+   */
   pickTrendPlace: ({ lat, lng, label }) => set((s) => {
     const cur = s.trendCase
+    if (!isInRegion(lat, lng)) {
+      return {
+        trendCase: {
+          places: cur?.places || [],
+          variable: cur?.variable || 'T2M',
+          theme: cur?.theme ?? null,
+          pickingCompare: cur?.pickingCompare || false,
+          outsideClick: { lat, lng },
+        },
+      }
+    }
     const place = { lat, lng, label: label || null }
     if (cur?.pickingCompare && cur.places.length) {
-      return { trendCase: { ...cur, places: [cur.places[0], place], pickingCompare: false } }
+      return { trendCase: { ...cur, places: [cur.places[0], place], pickingCompare: false, outsideClick: null } }
     }
     return {
       trendCase: {
@@ -791,6 +839,7 @@ export const useAtlasStore = create((set, get) => ({
         variable: cur?.variable || 'T2M',
         theme: cur?.theme ?? null,
         pickingCompare: false,
+        outsideClick: null,
       },
     }
   }),

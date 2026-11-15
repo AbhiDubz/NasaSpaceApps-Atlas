@@ -11,6 +11,7 @@ import { getTimezoneViewCenter } from '../../utils/geo'
 import { isMobileDevice } from '../../config/qualityTiers'
 import { GIBS_IMAGERY_LAYERS, GIBS_IMAGERY_LAYER_KEYS, gibsMaplibreTiles } from '../../config/gibsBasemap'
 import { terminatorGeoJsonLine } from '../../core/solarTerminator'
+import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
 import {
   useGlobeViewModels,
   applyMarkerClick,
@@ -115,6 +116,8 @@ export default function FlatMap({ onGlobeReady }) {
   const detectionMode = useAtlasStore((s) => s.detectionMode)
   const detectionLabelDensity = useAtlasStore((s) => s.detectionLabelDensity)
   const selectedEvent = useAtlasStore((s) => s.selectedEvent)
+  /** Trend Detective is open: outline its study region (Washington State). */
+  const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
   // No field layers on the 2D map — skip GDELT geo overlay fetching entirely.
   const { allMarkers } = useGlobeViewModels({ withFields: false })
   const visibleEvents = useMemo(() => allMarkers.map((vm) => vm.raw), [allMarkers])
@@ -377,6 +380,12 @@ export default function FlatMap({ onGlobeReady }) {
         setOnFlyToLocation((target) => {
           const m = mapRef.current
           if (!m) return
+          // A bounding box frames exactly (e.g. a whole state); the zoom steps below are only a fallback.
+          const b = target?.bbox
+          if (b && [b.north, b.south, b.east, b.west].every(Number.isFinite) && b.north > b.south) {
+            m.fitBounds([[b.west, b.south], [b.east, b.north]], { padding: 40, maxZoom: 13, duration: 1400 })
+            return
+          }
           const t = resolveFlyToTarget(target)
           if (!t) return
           let zoom = 12
@@ -594,6 +603,33 @@ export default function FlatMap({ onGlobeReady }) {
       paint: { 'raster-opacity': 0.88, 'raster-fade-duration': 300 },
     })
   }, [sentinel2Scene, mapReady])
+
+  // ── Trend Detective study-region border ──
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !mapReady) return
+    if (!m.getSource('trend-region')) {
+      m.addSource('trend-region', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'MultiLineString', coordinates: REGION_OUTLINE },
+        },
+      })
+      m.addLayer({
+        id: 'trend-region-line',
+        type: 'line',
+        source: 'trend-region',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': REGION_OUTLINE_COLOR,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 3, 1.5, 8, 3],
+        },
+      })
+    }
+    m.setLayoutProperty('trend-region-line', 'visibility', trendRegionOn ? 'visible' : 'none')
+  }, [trendRegionOn, mapReady])
 
   return (
     <div

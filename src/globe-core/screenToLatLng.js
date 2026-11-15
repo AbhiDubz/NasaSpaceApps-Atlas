@@ -3,9 +3,9 @@
  * Map3D has no public pick/unproject API for right-click, so we raycast a
  * spherical Earth (with a close-range tangent-plane fallback).
  */
-const EARTH_RADIUS_M = 6_371_000
+export const EARTH_RADIUS_M = 6_371_000
 /** Vertical FOV used for the synthetic camera (Map3D does not expose FOV). */
-const APPROX_FOV_DEG = 35
+export const APPROX_FOV_DEG = 35
 /** Below this range, tangent-plane pick is more stable than a bare sphere. */
 const TANGENT_RANGE_M = 2_500_000
 
@@ -14,7 +14,7 @@ const TANGENT_RANGE_M = 2_500_000
  * @param {number} lng
  * @param {number} [altM]
  */
-function latLngToEcef(lat, lng, altM = 0) {
+export function latLngToEcef(lat, lng, altM = 0) {
   const φ = (lat * Math.PI) / 180
   const λ = (lng * Math.PI) / 180
   const r = EARTH_RADIUS_M + altM
@@ -27,7 +27,7 @@ function latLngToEcef(lat, lng, altM = 0) {
 }
 
 /** @param {{ x: number, y: number, z: number }} p */
-function ecefToLatLng(p) {
+export function ecefToLatLng(p) {
   const r = Math.hypot(p.x, p.y, p.z)
   if (!(r > 0)) return null
   return {
@@ -44,7 +44,7 @@ function ecefToLatLng(p) {
  * @param {number} lat0
  * @param {number} lng0
  */
-function enuToEcef(east, north, up, lat0, lng0) {
+export function enuToEcef(east, north, up, lat0, lng0) {
   const φ = (lat0 * Math.PI) / 180
   const λ = (lng0 * Math.PI) / 180
   const sφ = Math.sin(φ)

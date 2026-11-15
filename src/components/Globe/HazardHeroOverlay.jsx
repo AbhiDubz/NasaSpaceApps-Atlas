@@ -1,6 +1,6 @@
 /**
- * Local canvas accents for top wildfire / cyclone markers on Globe.GL.
- * Screen-projected swirls / embers — capped hero sites only.
+ * Local canvas accents for top cyclone markers on Globe.GL.
+ * Screen-projected swirls — capped hero sites only.
  */
 import { useEffect, useRef } from 'react'
 
@@ -71,18 +71,6 @@ export default function HazardHeroOverlay({ enabled = false, heroes = [], projec
               else ctx.lineTo(px, py)
             }
             ctx.stroke()
-          }
-        } else if (h.family === 'flame') {
-          for (let i = 0; i < 14; i += 1) {
-            const ang = (i / 14) * Math.PI * 2 + elapsed * 0.6
-            const dist = (8 + (i % 5) * 4) + Math.sin(elapsed * 4 + i) * 3
-            const px = x + Math.cos(ang) * dist * 0.35
-            const py = y - Math.abs(Math.sin(elapsed * 3 + i)) * (r * 0.9) - dist * 0.2
-            const alpha = 0.25 + 0.35 * Math.abs(Math.sin(elapsed * 5 + i))
-            ctx.fillStyle = `rgba(255, ${120 + (i % 4) * 30}, 40, ${alpha})`
-            ctx.beginPath()
-            ctx.arc(px, py, 2.2, 0, Math.PI * 2)
-            ctx.fill()
           }
         }
       }

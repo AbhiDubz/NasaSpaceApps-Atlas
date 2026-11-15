@@ -92,24 +92,60 @@ export function extractChoroplethRows(geojson) {
   return rows
 }
 
+/** Countries with fewer events than this don't set the colour scale (one story ≠ a national mood). */
+const TONE_RANGE_MIN_EVENTS = 3
+const TONE_SCALE_FLOOR = 2
+const TONE_SCALE_CEIL = 10
+
+/**
+ * Symmetric tone scale around zero: `{ min: -s, max: s }`, where `s` is the
+ * 90th percentile of |tone| among countries with enough events. A plain
+ * min/max let a single one-event outlier stretch the scale until every other
+ * country landed on the same mid colour.
+ */
 export function choroplethToneRange(rows) {
-  const tones = rows.map((r) => r.tone).filter((t) => Number.isFinite(t))
-  if (!tones.length) return { min: -5, max: 5 }
-  let min = Math.min(...tones)
-  let max = Math.max(...tones)
-  if (min === max) {
-    min -= 1
-    max += 1
-  }
-  return { min, max }
+  const usable = (rows || []).filter((r) => Number.isFinite(r.tone))
+  if (!usable.length) return { min: -5, max: 5 }
+  const solid = usable.filter((r) => (r.count || 0) >= TONE_RANGE_MIN_EVENTS)
+  const mags = (solid.length >= 3 ? solid : usable).map((r) => Math.abs(r.tone)).sort((x, y) => x - y)
+  const p90 = mags[Math.floor((mags.length - 1) * 0.9)]
+  const scale = Math.min(TONE_SCALE_CEIL, Math.max(TONE_SCALE_FLOOR, p90))
+  return { min: -scale, max: scale }
 }
 
-export function toneToChoroplethRgba(t, min, max) {
-  const norm = max === min ? 0.5 : (t - min) / (max - min)
-  const r = Math.round(30 + norm * 210)
-  const g = Math.round(140 - Math.abs(norm - 0.5) * 160)
-  const b = Math.round(220 * (1 - norm) + 40 * norm)
-  return `rgba(${r},${g},${b},0.48)`
+/** Negative coverage → warm red, positive → blue (distinguishable with red-green colour blindness). */
+const TONE_NEGATIVE_RGB = [232, 78, 62]
+const TONE_POSITIVE_RGB = [64, 140, 246]
+const TONE_ALPHA_MIN = 0.06
+const TONE_ALPHA_MAX = 0.4
+
+/**
+ * Fill colour + opacity for a country tone. Hue says which way coverage leans;
+ * opacity says how strongly, so near-neutral and thinly-covered countries stay
+ * almost clear and the imagery underneath is not washed out.
+ * @param {number} t
+ * @param {number} min
+ * @param {number} max
+ * @param {number} [count] events behind the average
+ * @returns {{ rgb: [number, number, number], alpha: number }}
+ */
+export function toneToChoroplethColor(t, min, max, count = Infinity) {
+  const scale = Math.max(Math.abs(min), Math.abs(max)) || 1
+  const tone = Number.isFinite(t) ? t : 0
+  const mag = Math.min(1, Math.abs(tone) / scale)
+  const confidence = Math.min(1, 0.4 + 0.2 * Math.max(0, count))
+  const alpha = (TONE_ALPHA_MIN + (TONE_ALPHA_MAX - TONE_ALPHA_MIN) * mag) * confidence
+  return { rgb: tone < 0 ? TONE_NEGATIVE_RGB : TONE_POSITIVE_RGB, alpha }
+}
+
+/** @param {{ rgb: number[], alpha: number }} color @param {number} [fade] 0–1 multiplier on opacity */
+export function choroplethColorToRgba(color, fade = 1) {
+  const a = Math.max(0, Math.min(1, color.alpha * fade))
+  return `rgba(${color.rgb[0]},${color.rgb[1]},${color.rgb[2]},${a.toFixed(3)})`
+}
+
+export function toneToChoroplethRgba(t, min, max, count) {
+  return choroplethColorToRgba(toneToChoroplethColor(t, min, max, count))
 }
 
 /**

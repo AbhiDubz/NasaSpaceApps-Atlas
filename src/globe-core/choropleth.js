@@ -2,9 +2,10 @@
  * globe-core/choropleth — GDELT country-tone choropleth view-models.
  *
  * Joins the tone scale once so renderers never re-derive fill colors:
- * `{ key, geometry, fill, stroke, name, iso, tone, count, props }`.
+ * `{ key, geometry, fill, fillColor, stroke, name, iso, tone, count, props }`.
+ * `fillColor` (`{ rgb, alpha }`) lets a renderer fade the fill by zoom.
  */
-import { toneToChoroplethRgba } from '../services/gdelt/geoService'
+import { choroplethColorToRgba, toneToChoroplethColor } from '../services/gdelt/geoService'
 
 export const CHOROPLETH_STROKE = 'rgba(255,255,255,0.22)'
 
@@ -12,17 +13,32 @@ export function buildChoroplethViewModels(rows, toneRange) {
   if (!Array.isArray(rows) || rows.length === 0) return []
   const min = toneRange?.min ?? -5
   const max = toneRange?.max ?? 5
-  return rows.map((r, i) => ({
-    key: `gdelt-choro-${i}`,
-    geometry: r.geometry,
-    fill: toneToChoroplethRgba(r.tone, min, max),
-    stroke: CHOROPLETH_STROKE,
-    name: r.name,
-    iso: r.iso,
-    tone: r.tone,
-    count: r.count,
-    props: r.props,
-  }))
+  return rows.map((r, i) => {
+    const fillColor = toneToChoroplethColor(r.tone, min, max, r.count)
+    return {
+      key: `gdelt-choro-${i}`,
+      geometry: r.geometry,
+      fill: choroplethColorToRgba(fillColor),
+      fillColor,
+      stroke: CHOROPLETH_STROKE,
+      name: r.name,
+      iso: r.iso,
+      tone: r.tone,
+      count: r.count,
+      props: r.props,
+    }
+  })
+}
+
+/** Below this camera range the country fill is fully faded so close-up imagery stays sharp. */
+const FILL_FADE_NEAR_M = 800_000
+const FILL_FADE_FAR_M = 5_000_000
+
+/** 0–1 fill-opacity multiplier for a camera range: full at continental views, clear up close. */
+export function choroplethFillFade(cameraRangeM) {
+  if (!Number.isFinite(cameraRangeM)) return 1
+  const f = (cameraRangeM - FILL_FADE_NEAR_M) / (FILL_FADE_FAR_M - FILL_FADE_NEAR_M)
+  return Math.max(0, Math.min(1, f))
 }
 
 /** Flatten GeoJSON Polygon / MultiPolygon geometry to an array of outer rings. */
