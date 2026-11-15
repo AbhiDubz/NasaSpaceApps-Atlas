@@ -9,6 +9,7 @@ import {
   getSeveritySize,
 } from '../core/visualGrammar'
 import { enrichEventMarkerVisuals } from '../core/markerIconCache'
+import { classifySignalCategory, signalCategoryColor } from '../core/signalBadgeIcons'
 import { eventSourceToGlobeDataLayerKey } from '../core/globeLayers'
 import {
   MARKER_ARCHETYPES,
@@ -21,7 +22,7 @@ import {
 } from '../core/markerArchetype'
 import { getHazardEffectProfile } from '../core/environmentHazardEffects'
 import { getHazardModelUrl } from '../core/hazardModelCatalog'
-import { resolveHazardFill, resolveSignalFill } from '../core/hazardColors'
+import { resolveHazardFill } from '../core/hazardColors'
 
 const REVEAL_MS = 450
 
@@ -68,7 +69,8 @@ export function eventMarkerColor(evt) {
   if (evt?.environmentHazard) {
     return resolveHazardFill(evt.environmentHazard, evt.severity)
   }
-  return resolveSignalFill(evt?.severity)
+  // Non-hazard pins share their badge color (GDELT category / camera)
+  return signalCategoryColor(classifySignalCategory(evt))
 }
 
 export function eventMarkerRadiusGl(evt) {

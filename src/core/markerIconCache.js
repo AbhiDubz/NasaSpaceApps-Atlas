@@ -15,6 +15,13 @@ import {
 import { resolveHazardFill, resolveHazardFillAlpha, resolveSignalFill } from './hazardColors.js'
 import { drawHazardMarker } from './environmentHazardIcons.js'
 import { warmArchetypeIconCache } from './archetypeIcons.js'
+import {
+  classifySignalCategory,
+  getSignalBadgeIconUrl,
+  isCameraEvent as isCameraEventLocal,
+  signalCategoryColor,
+  warmSignalBadgeCache,
+} from './signalBadgeIcons.js'
 
 const ICON_SIZE = 64
 const HALF = ICON_SIZE / 2
@@ -84,6 +91,12 @@ function buildDimensionIconUrl(severity = 3) {
   return url
 }
 
+// Non-hazard signal pins (GDELT categories, live cameras) use designed badges
+// from signalBadgeIcons.js instead of the generic unlabeled disc above.
+export { isCameraEvent } from './signalBadgeIcons.js'
+/** Badge fill for camera pins (kept for renderers that tint by color). */
+export const CAMERA_MARKER_COLOR = signalCategoryColor('camera')
+
 /** Pre-generate every hazard×severity + non-environment severity icon. Call once at startup. */
 export function warmMarkerIconCache() {
   if (cacheReady) return
@@ -95,6 +108,7 @@ export function warmMarkerIconCache() {
   for (const sev of SEVERITIES) {
     buildDimensionIconUrl(sev)
   }
+  warmSignalBadgeCache()
   warmArchetypeIconCache()
   cacheReady = true
 }
@@ -123,18 +137,23 @@ export function enrichEventMarkerVisuals(event) {
   if (!event) return event
 
   const dimension = eventDimension(event)
-  const environmentHazard = dimension === DIMENSIONS.ENVIRONMENT
+  const isHazard = dimension === DIMENSIONS.ENVIRONMENT && !isCameraEventLocal(event)
+  const environmentHazard = isHazard
     ? (event.environmentHazard || classifyEnvironmentHazard(event))
     : null
   const severity = clampSeverity(event.severity)
 
-  const markerIconUrl = dimension === DIMENSIONS.ENVIRONMENT
-    ? getHazardMarkerIconUrl(environmentHazard, severity)
-    : getDimensionMarkerIconUrl(severity)
-
-  const color = dimension === DIMENSIONS.ENVIRONMENT
-    ? resolveHazardFill(environmentHazard, severity)
-    : resolveSignalFill(severity)
+  let markerIconUrl
+  let color
+  if (isHazard) {
+    markerIconUrl = getHazardMarkerIconUrl(environmentHazard, severity)
+    color = resolveHazardFill(environmentHazard, severity)
+  } else {
+    warmMarkerIconCache()
+    const category = classifySignalCategory(event)
+    markerIconUrl = getSignalBadgeIconUrl(category, severity)
+    color = signalCategoryColor(category)
+  }
 
   if (
     event.environmentHazard === environmentHazard
