@@ -12,7 +12,8 @@ let nextId = 1
 let controller = null
 
 /**
- * @typedef {{ id: number, role: 'user' | 'model', text: string, status: 'streaming' | 'done' | 'error', error?: string }} ChatMessage
+ * @typedef {{ id: number, role: 'user' | 'model', text: string, status: 'streaming' | 'done' | 'error', error?: string, activity?: string | null }} ChatMessage
+ *   `activity` is what the server is looking up right now ("Reading snow depth at …").
  */
 
 export const useChatStore = create((set, get) => ({
@@ -51,7 +52,8 @@ export const useChatStore = create((set, get) => ({
       }
       let failed = null
       await readNdjson(res.body, (event) => {
-        if (typeof event.t === 'string') patchReply((m) => ({ text: m.text + event.t }))
+        if (typeof event.t === 'string') patchReply((m) => ({ text: m.text + event.t, activity: null }))
+        else if (typeof event.status === 'string') patchReply(() => ({ activity: event.status }))
         else if (event.error) failed = event.error
       })
       patchReply((m) =>

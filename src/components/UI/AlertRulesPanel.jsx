@@ -26,20 +26,32 @@ function emptyRule(user) {
 
 export default function AlertRulesSection() {
   const user = useAtlasStore((s) => s.user)
+  const pushToast = useAtlasStore((s) => s.pushToast)
   const [rules, setRules] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!user || !supabase) return
+    if (!user) return
+    const cacheKey = `atlas_alert_rules_${user.id}`
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      if (Array.isArray(cached)) setRules(cached)
+    } catch {
+      /* ignore */
+    }
+    if (!supabase) return
     setLoading(true)
     supabase
       .from('alert_rules')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        setRules(data || [])
+      .then(({ data, error }) => {
+        if (!error && Array.isArray(data)) {
+          try { localStorage.setItem(cacheKey, JSON.stringify(data)) } catch { /* ignore */ }
+          setRules(data)
+        }
         setLoading(false)
       })
   }, [user])
@@ -55,15 +67,22 @@ export default function AlertRulesSection() {
 
   const removeRule = async (id) => {
     const rule = rules.find((r) => r.id === id)
-    setRules((prev) => prev.filter((r) => r.id !== id))
+    setRules((prev) => {
+      const next = prev.filter((r) => r.id !== id)
+      if (user) {
+        try { localStorage.setItem(`atlas_alert_rules_${user.id}`, JSON.stringify(next)) } catch { /* ignore */ }
+      }
+      return next
+    })
     if (supabase && rule && !rule._isNew) {
       await supabase.from('alert_rules').delete().eq('id', id)
     }
   }
 
   const saveAll = async () => {
-    if (!supabase || !user) return
+    if (!user) return
     setSaving(true)
+    const saved = []
     for (const rule of rules) {
       const payload = {
         id: rule.id,
@@ -75,10 +94,15 @@ export default function AlertRulesSection() {
         destination: rule.destination,
         enabled: rule.enabled,
       }
-      await supabase.from('alert_rules').upsert(payload)
+      if (supabase) {
+        await supabase.from('alert_rules').upsert(payload)
+      }
+      saved.push({ ...payload, _isNew: false })
     }
-    setRules((prev) => prev.map((r) => ({ ...r, _isNew: false })))
+    try { localStorage.setItem(`atlas_alert_rules_${user.id}`, JSON.stringify(saved)) } catch { /* ignore */ }
+    setRules(saved)
     setSaving(false)
+    pushToast({ label: 'Alerts', message: `Saved ${saved.length} alert rule${saved.length === 1 ? '' : 's'}` })
   }
 
   if (!user) return null

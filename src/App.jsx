@@ -21,7 +21,13 @@ import { useOntologyHydration } from './hooks/useOntologyHydration'
 import ToastHost from './components/UI/ToastHost'
 import CountryContextMenu from './components/UI/CountryContextMenu'
 import GlobeLegend from './components/UI/GlobeLegend'
-import { supabase } from './services/supabase'
+import {
+  supabase,
+  consumeOAuthPending,
+  hasOAuthCallbackParams,
+  readOAuthCallbackError,
+  scrubOAuthCallbackUrl,
+} from './services/supabase'
 import { loadCountryPolygons } from './services/countryIndex'
 import { LANDMARK_SHORTCUT_KEYS } from './config/landmarkPresets'
 import LandingPage from './components/Landing/LandingPage'
@@ -29,6 +35,8 @@ import WorkspaceDashboard from './components/Workspace/WorkspaceDashboard'
 import WorkspaceTimeline from './components/Workspace/WorkspaceTimeline'
 import TrendCaseFile, { TrendLauncher } from './components/Trend/TrendCaseFile'
 import AskAtlasPanel, { AskAtlasLauncher } from './components/Chat/AskAtlas'
+import AppTour from './components/Tour/AppTour'
+import { syncTourDecisionToAccount } from './core/tourState'
 
 const GoogleGlobe = lazy(() => import('./components/Globe/GoogleGlobe'))
 const GlobeGLView = lazy(() => import('./components/Globe/GlobeGLView'))
@@ -130,14 +138,6 @@ function AtlasLiveApp() {
     if (user && onGlobeView) loadWorkspaces()
   }, [user, onGlobeView, loadWorkspaces])
 
-  useEffect(() => {
-    if (!onGlobeView || !user) return
-    const { appView: view, activeWorkspaceId: wsId } = useAtlasStore.getState()
-    if (view === 'workstation' && !wsId) {
-      useAtlasStore.getState().setAppView('dashboard')
-    }
-  }, [user, onGlobeView, appView, activeWorkspaceId])
-
   const showDashboard = onGlobeView && user && appView === 'dashboard'
   const showGlobeWorkstation = onGlobeView && !showDashboard
   const inWorkspace = showGlobeWorkstation && Boolean(activeWorkspaceId)
@@ -160,16 +160,46 @@ function AtlasLiveApp() {
   }, [])
 
   useEffect(() => {
-    if (!supabase) return undefined
+    if (!supabase) {
+      useAtlasStore.getState().setAuthReady()
+      return undefined
+    }
+    const hadOAuthCallback = hasOAuthCallbackParams()
+    const oauthPending = consumeOAuthPending()
+    const oauthErr = readOAuthCallbackError()
+    if (oauthErr) {
+      useAtlasStore.getState().pushToast({ label: 'Auth', message: oauthErr })
+      scrubOAuthCallbackUrl()
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const store = useAtlasStore.getState()
         store.setUser(session.user)
-        if (!store.activeWorkspaceId) store.setAppView('dashboard')
+        syncTourDecisionToAccount(session.user)
+        if (!store.activeWorkspaceId) store.setAppView('workstation')
+        if (hadOAuthCallback || oauthPending) {
+          scrubOAuthCallbackUrl()
+          store.pushToast({
+            label: 'Account',
+            message: `Signed in as ${session.user.email || 'analyst'}`,
+          })
+        }
+      } else if (hadOAuthCallback) {
+        scrubOAuthCallbackUrl()
       }
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      useAtlasStore.getState().setUser(session?.user ?? null)
+    }).finally(() => useAtlasStore.getState().setAuthReady())
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUser = session?.user ?? null
+      const store = useAtlasStore.getState()
+      store.setUser(nextUser)
+      if (nextUser) {
+        syncTourDecisionToAccount(nextUser)
+        if (event === 'SIGNED_IN' && hasOAuthCallbackParams()) {
+          scrubOAuthCallbackUrl()
+        }
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -362,6 +392,7 @@ function AtlasLiveApp() {
                 </motion.div>
               )}
             </AnimatePresence>
+            {globeReady && <AppTour hudHidden={hudHidden} onShowHud={() => setHudHidden(false)} />}
           </motion.div>
         )}
       </AnimatePresence>

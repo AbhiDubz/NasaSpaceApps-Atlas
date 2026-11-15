@@ -1,29 +1,17 @@
 /**
- * Landing hero — Google Map3D (photorealistic / Earth-like) with the same feature markers
- * as the former globe.gl demo. No news feed, events, or Street View; map clicks clear cards only.
+ * Landing hero — decorative Google Map3D (photorealistic) backdrop: intro fly-in, idle spin,
+ * drag to orbit. Intentionally no markers or info cards — feature discovery lives in the
+ * in-app guided tour (`components/Tour/AppTour`).
  */
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  APIProvider,
-  AltitudeMode,
-  CollisionBehavior,
-  Map3D,
-  MapMode,
-  Marker3D,
-  Popover,
-} from '@vis.gl/react-google-maps'
-import { getCategoryColor } from '../../utils/categoryColors'
-import { LANDING_GLOBE_MARKERS } from './landingGlobeMarkers'
+import { Component, useCallback, useEffect, useMemo, useRef } from 'react'
+import { APIProvider, Map3D, MapMode } from '@vis.gl/react-google-maps'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 
-/**
- * Same geographic POV as `LandingGlobeDemo` globe.gl:
- * `.pointOfView({ lat: 24, lng: 12, altitude: 2.35 })` — keep in sync when adjusting either hero.
- */
+/** Hero point of view — Africa / Europe centred, sphere filling the upper fold. */
 const LANDING_VIEW_CENTER = { lat: 24, lng: 12, altitude: 0 }
 
-/** Tuned with `.landing-google-globe--elevated` so Map3D fills the fold like globe.gl altitude 2.35 */
+/** Tuned with `.landing-google-globe--elevated` so Map3D fills the fold */
 const RANGE_INTRO_FROM_M = 34_000_000
 const RANGE_INTRO_TO_M = 18_200_000
 const LANDING_TILT = 46
@@ -32,33 +20,6 @@ const INTRO_MS = 2600
 const RESUME_AFTER_RELEASE_MS = 450
 /** Degrees per animation frame while idle-spinning */
 const SPIN_DEG_PER_FRAME = 0.09
-const MARKER_ALT_M = 1400
-const MARKER_PX = 22
-
-const _dotUrlCache = new Map()
-
-function categoryDotDataUrl(category) {
-  const css = getCategoryColor(category)
-  if (_dotUrlCache.has(css)) return _dotUrlCache.get(css)
-  const s = 48
-  const h = s / 2
-  const c = document.createElement('canvas')
-  c.width = s
-  c.height = s
-  const ctx = c.getContext('2d')
-  ctx.beginPath()
-  ctx.arc(h, h, h - 6, 0, Math.PI * 2)
-  ctx.fillStyle = css
-  ctx.globalAlpha = 0.88
-  ctx.fill()
-  ctx.globalAlpha = 1
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)'
-  ctx.lineWidth = 2
-  ctx.stroke()
-  const url = c.toDataURL('image/png')
-  _dotUrlCache.set(css, url)
-  return url
-}
 
 class LandingGlobeErrorBoundary extends Component {
   constructor(props) {
@@ -102,7 +63,6 @@ function InnerLandingMap() {
     tilt: LANDING_TILT,
     roll: 0,
   })
-  const [selected, setSelected] = useState(null)
   const readyRef = useRef(false)
   const introStartedRef = useRef(false)
   const introDoneRef = useRef(false)
@@ -114,16 +74,6 @@ function InnerLandingMap() {
   const spinRafRef = useRef(null)
   const reduceMotion =
     typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
-
-  const clearSelection = useCallback(() => setSelected(null), [])
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') setSelected(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
 
   const pauseSpin = useCallback(() => {
     idleSpinGateRef.current = false
@@ -147,39 +97,6 @@ function InnerLandingMap() {
     // Do not pause spin here — our own heading writes fire camera events and would
     // immediately cancel auto-rotate. Gestures pause via pointer/wheel handlers.
   }, [])
-
-  const flyToMarker = useCallback((lat, lng) => {
-    const map = map3dRef.current
-    if (!map?.flyCameraTo) return
-    const cam = cameraRef.current
-    const nextRange = Math.max(180_000, Math.min(4_500_000, (cam.range ?? RANGE_INTRO_TO_M) * 0.42))
-    map.flyCameraTo({
-      endCamera: {
-        center: { lat, lng, altitude: 0 },
-        range: nextRange,
-        heading: cam.heading ?? 0,
-        tilt: Math.min(62, Math.max(28, cam.tilt ?? LANDING_TILT)),
-        roll: 0,
-      },
-      durationMillis: 1300,
-    })
-  }, [])
-
-  const handleMapClick = useCallback(() => {
-    setSelected(null)
-  }, [])
-
-  const onMarkerClick = useCallback(
-    (e, m) => {
-      e?.stopPropagation?.()
-      e?.preventDefault?.()
-      setSelected(m)
-      flyToMarker(m.lat, m.lng)
-      pauseSpin()
-      resumeSpinSoon()
-    },
-    [flyToMarker, pauseSpin, resumeSpinSoon],
-  )
 
   const enableIdleSpin = useCallback(() => {
     introDoneRef.current = true
@@ -259,7 +176,7 @@ function InnerLandingMap() {
   // <gmp-map-3d> is focusable by default, which lands keyboard users on a
   // decorative background map before the nav — with no focus ring, and with
   // arrow keys panning instead of scrolling. The element mounts asynchronously,
-  // so poll briefly for it. Pointer orbit and marker clicks are unaffected.
+  // so poll briefly for it. Pointer orbit is unaffected.
   useEffect(() => {
     const id = setInterval(() => {
       const el = map3dRef.current?.map3d
@@ -344,7 +261,7 @@ function InnerLandingMap() {
         mode={MapMode.HYBRID}
         defaultUIHidden
         // Suppress Google's baked-in POI dots / labels on the 3D tile layer
-        // so only Atlas's own landing markers are visible.
+        // for a clean, label-free hero backdrop.
         defaultLabelsDisabled
         defaultCenter={viewCenter}
         defaultRange={reduceMotion ? RANGE_INTRO_TO_M : RANGE_INTRO_FROM_M}
@@ -354,64 +271,8 @@ function InnerLandingMap() {
         maxAltitude={42_000_000}
         gestureHandling="GREEDY"
         onCameraChanged={handleCameraChanged}
-        onClick={handleMapClick}
         onSteadyChange={onFirstSteady}
-      >
-        {LANDING_GLOBE_MARKERS.map((m) => (
-          <Marker3D
-            key={m.id}
-            position={{ lat: m.lat, lng: m.lng, altitude: MARKER_ALT_M }}
-            altitudeMode={AltitudeMode.RELATIVE_TO_GROUND}
-            drawsWhenOccluded
-            sizePreserved
-            collisionBehavior={CollisionBehavior.OPTIONAL_AND_HIDES_LOWER_PRIORITY}
-            title={m.title}
-            onClick={(e) => onMarkerClick(e, m)}
-          >
-            <img
-              src={categoryDotDataUrl(m.category)}
-              width={MARKER_PX}
-              height={MARKER_PX}
-              alt=""
-              draggable={false}
-              className="atlas-globe-dot-pulse"
-              style={{ opacity: 0.95 }}
-            />
-          </Marker3D>
-        ))}
-
-        {selected ? (
-          <Popover
-            key={selected.id}
-            open
-            position={{ lat: selected.lat, lng: selected.lng, altitude: MARKER_ALT_M }}
-            altitudeMode={AltitudeMode.RELATIVE_TO_GROUND}
-            autoPanDisabled
-            onClose={clearSelection}
-            className="landing-google-globe__popover"
-          >
-            <article
-              className="landing-globe-demo__card font-[family-name:var(--font-ui)]"
-              style={{ borderColor: `${getCategoryColor(selected.category)}55` }}
-            >
-              <button type="button" className="landing-globe-demo__card-close" onClick={clearSelection} aria-label="Close">
-                ×
-              </button>
-              <p
-                className="landing-globe-demo__card-kicker font-[family-name:var(--font-data)]"
-                style={{ color: getCategoryColor(selected.category) }}
-              >
-                {selected.kind === 'use_case' ? 'Use case' : 'Feature'}
-              </p>
-              <h3 className="landing-globe-demo__card-title">{selected.title}</h3>
-              <p className="landing-globe-demo__card-body">{selected.body}</p>
-              {selected.kind === 'use_case' && selected.stat ? (
-                <p className="landing-globe-demo__card-stat font-[family-name:var(--font-data)]">{selected.stat}</p>
-              ) : null}
-            </article>
-          </Popover>
-        ) : null}
-      </Map3D>
+      />
     </div>
   )
 }
@@ -434,7 +295,7 @@ export default function LandingGoogleGlobe() {
   return (
     <div
       className="landing-globe-demo landing-globe-demo--immersive landing-google-globe--elevated"
-      aria-label="Interactive photorealistic 3D globe: drag to orbit, click markers for features and use cases"
+      aria-label="Interactive photorealistic 3D globe: drag to orbit"
     >
       <div className="landing-globe-demo--immersive__host relative min-h-0">
         <div className="absolute inset-0 min-h-[100dvh] min-w-0">

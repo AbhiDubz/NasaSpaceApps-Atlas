@@ -22,6 +22,7 @@ export default function GlobeLegend() {
     <div
       className="fixed left-4 bottom-14 z-40 flex flex-col items-start"
       data-testid="globe-legend"
+      data-tour="legend"
     >
       {open ? (
         <div className="w-60 rounded-lg border border-line bg-bg/85 p-3 backdrop-blur-xl shadow-lg">

@@ -32,7 +32,7 @@ function placeName(place) {
 }
 
 /** The parts of a trend result worth quoting; the series themselves stay out. */
-function summarizeResult(data) {
+export function summarizeResult(data) {
   const out = {
     verdict: data.verdict,
     tested: data.step === 'year' ? `${data.seasonLabel} only (${data.seasonSpan}), one average per year` : 'every month, seasons removed',
@@ -134,9 +134,9 @@ export function buildChatContext({ trendCase, results = [], scan } = {}) {
 export function suggestedQuestions(trendCase, firstResult) {
   if (!trendCase || !trendCase.places?.length) {
     return [
-      'What can Trend Detective show me?',
-      'Which saved case should I start with?',
-      "What does Sen's slope mean?",
+      'What was the temperature in Seattle last February?',
+      'What is changing in Spokane?',
+      'Which year had the deepest snow at Snoqualmie Pass?',
     ]
   }
   const meta = POWER_VARIABLES[trendCase.variable] || POWER_VARIABLES.T2M

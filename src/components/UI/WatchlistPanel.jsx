@@ -40,21 +40,36 @@ function emptyItem(user) {
 export default function WatchlistSection() {
   const user = useAtlasStore((s) => s.user)
   const setWatchlists = useAtlasStore((s) => s.setWatchlists)
+  const pushToast = useAtlasStore((s) => s.pushToast)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!user || !supabase) return
+    if (!user) return
+    const cacheKey = `atlas_watchlists_${user.id}`
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      if (Array.isArray(cached)) {
+        setItems(cached)
+        setWatchlists(cached)
+      }
+    } catch {
+      /* ignore */
+    }
+    if (!supabase) return
     setLoading(true)
     supabase
       .from('watchlists')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        setItems(data || [])
-        setWatchlists(data || [])
+      .then(({ data, error }) => {
+        if (!error && Array.isArray(data)) {
+          try { localStorage.setItem(cacheKey, JSON.stringify(data)) } catch { /* ignore */ }
+          setItems(data)
+          setWatchlists(data)
+        }
         setLoading(false)
       })
   }, [user, setWatchlists])
@@ -73,6 +88,9 @@ export default function WatchlistSection() {
     setItems((prev) => {
       const next = prev.filter((r) => r.id !== id)
       setWatchlists(next)
+      if (user) {
+        try { localStorage.setItem(`atlas_watchlists_${user.id}`, JSON.stringify(next)) } catch { /* ignore */ }
+      }
       return next
     })
     if (supabase && row && !row._isNew) {
@@ -81,7 +99,7 @@ export default function WatchlistSection() {
   }
 
   const saveAll = async () => {
-    if (!supabase || !user) return
+    if (!user) return
     setSaving(true)
     const saved = []
     for (const row of items) {
@@ -94,12 +112,16 @@ export default function WatchlistSection() {
         match_value: row.match_value.trim(),
         enabled: row.enabled !== false,
       }
-      await supabase.from('watchlists').upsert(payload)
+      if (supabase) {
+        await supabase.from('watchlists').upsert(payload)
+      }
       saved.push({ ...payload, _isNew: false })
     }
+    try { localStorage.setItem(`atlas_watchlists_${user.id}`, JSON.stringify(saved)) } catch { /* ignore */ }
     setItems(saved)
     setWatchlists(saved)
     setSaving(false)
+    pushToast({ label: 'Watchlists', message: `Saved ${saved.length} watchlist${saved.length === 1 ? '' : 's'}` })
   }
 
   if (!user) return null

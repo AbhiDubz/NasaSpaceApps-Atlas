@@ -11,20 +11,33 @@ export function useWatchlistAlerts(enabled = true) {
   const seenRef = useRef(new Set())
 
   useEffect(() => {
-    if (!enabled || !user || !supabase) {
+    if (!enabled || !user) {
       useAtlasStore.getState().setWatchlists([])
       return undefined
     }
 
     let cancelled = false
+    const cacheKey = `atlas_watchlists_${user.id}`
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      if (Array.isArray(cached) && cached.length) {
+        useAtlasStore.getState().setWatchlists(cached)
+      }
+    } catch {
+      /* ignore */
+    }
 
     const load = async () => {
-      const { data } = await supabase
+      if (!supabase) return
+      const { data, error } = await supabase
         .from('watchlists')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: true })
-      if (!cancelled) useAtlasStore.getState().setWatchlists(data || [])
+      if (!cancelled && !error && Array.isArray(data)) {
+        try { localStorage.setItem(cacheKey, JSON.stringify(data)) } catch { /* ignore */ }
+        useAtlasStore.getState().setWatchlists(data)
+      }
     }
 
     load().then(() => {

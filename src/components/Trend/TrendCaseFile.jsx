@@ -438,6 +438,7 @@ export function TrendLauncher() {
         openTrendCase()
         flyToRegion(flyToLocation)
       }}
+      data-tour="trend"
       className={cn(BTN, 'border-accent-border bg-[rgba(3,7,18,0.94)] px-5! py-2.5! text-base text-accent shadow-xl')}
     >
       <Search className="h-5 w-5" />

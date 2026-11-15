@@ -15,6 +15,7 @@ import { ArrowUp, RotateCcw, Sparkles, Square, X } from 'lucide-react'
 import { useAtlasStore } from '../../store/atlasStore'
 import { useTrend, useTrendScan } from '../../hooks/useNasaPower'
 import { buildChatContext, suggestedQuestions } from '../../services/chat/chatContext.js'
+import { plainMath } from '../../services/chat/plainMath.js'
 import { POWER_VARIABLES } from '../../services/nasaPower/variables.js'
 import { seasonById } from '../../services/nasaPower/trendStats.js'
 import { demoPlaceLabel } from '../../services/nasaPower/demos.js'
@@ -39,11 +40,11 @@ function inline(text) {
   )
 }
 
-/** Paragraphs and "- " lists: all the formatting the model is asked to use. */
+/** Paragraphs and "- " lists: all the formatting the model is asked to use. Stray LaTeX math becomes plain text. */
 function RichText({ text }) {
   const blocks = []
   let list = null
-  for (const raw of text.split('\n')) {
+  for (const raw of plainMath(text).split('\n')) {
     const line = raw.trimEnd()
     const item = line.match(/^\s*[-*•]\s+(.*)$/)
     if (item) {
@@ -89,18 +90,20 @@ function Message({ message }) {
       </div>
     )
   }
-  const waiting = message.status === 'streaming' && !message.text
+  const streaming = message.status === 'streaming'
+  const busyLine = streaming && (message.activity || (!message.text ? 'Thinking…' : null))
   return (
     <div className="flex flex-col gap-1">
-      {waiting ? (
-        <p className="flex items-center gap-2 text-sm text-muted" role="status">
-          <Sparkles className="h-4 w-4 animate-pulse text-accent" aria-hidden="true" />
-          Reading the record…
-        </p>
-      ) : message.text ? (
+      {message.text ? (
         <div className="text-sm leading-normal text-slate-200">
           <RichText text={message.text} />
         </div>
+      ) : null}
+      {busyLine ? (
+        <p className="flex items-center gap-2 text-sm text-muted" role="status">
+          <Sparkles className="h-4 w-4 shrink-0 animate-pulse text-accent" aria-hidden="true" />
+          {busyLine}
+        </p>
       ) : null}
       {message.status === 'error' ? (
         <p className="rounded-md border border-red-400/40 bg-red-500/10 px-3! py-2! text-sm leading-normal text-red-200" role="alert">
@@ -132,6 +135,7 @@ export function AskAtlasLauncher() {
     <button
       type="button"
       onClick={openAskAtlas}
+      data-tour="ask-atlas"
       className={cn(BTN, PANEL_BG, 'border-line-strong px-5! py-2.5! text-base text-text shadow-xl hover:border-accent-border')}
     >
       <Sparkles className="h-5 w-5 text-accent" aria-hidden="true" />
@@ -230,8 +234,8 @@ function Panel() {
           <div className="flex flex-col gap-3">
             <p className="text-sm leading-normal text-muted">
               {caseOpen
-                ? 'Ask what the trend means, how sure it is, or what else is changing here. Answers use the numbers in your case file.'
-                : 'Ask how Trend Detective works, what a measure means, or where to start. Open the case file to ask about a place.'}
+                ? 'Ask what the trend means, how sure it is, what else is changing here, or for any month or year in the record. Answers come from the NASA data.'
+                : 'Ask for any measure at any place in Washington, 1981–2025: a month, a year, a trend, or what is changing there. Answers come from the NASA data.'}
             </p>
             <div className="flex flex-col gap-2" role="group" aria-label="Suggested questions">
               {suggestions.map((q) => (
