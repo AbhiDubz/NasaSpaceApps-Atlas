@@ -94,46 +94,129 @@ export function loadPlacesLibrary() {
 }
 
 /**
- * Thin wrapper around `AutocompleteService.getPlacePredictions` that
- * returns a plain array of `{ placeId, main, secondary, description }`
- * so the UI layer never touches Maps objects directly.
+ * Raw Places (New) predictions from the latest autocomplete call, keyed
+ * by place id. Resolving through `placePrediction.toPlace()` keeps the
+ * details lookup inside the same billing session as the keystrokes.
  */
-export function searchPlacePredictions(input, sessionToken) {
+const latestPredictions = new Map()
+
+/**
+ * Autocomplete places and street addresses. Returns a plain array of
+ * `{ placeId, main, secondary, description, types }` so the UI layer
+ * never touches Maps objects directly.
+ *
+ * Uses Places API (New) `AutocompleteSuggestion`; the legacy
+ * `AutocompleteService` is only a fallback for SDK builds without it,
+ * because Google no longer enables the legacy API on new keys.
+ *
+ * Rejects when the key is missing or the API refuses the request, so
+ * callers can tell "no matches" apart from "search is down".
+ */
+export async function searchPlacePredictions(input, sessionToken) {
   const q = typeof input === 'string' ? input.trim() : ''
-  if (!q) return Promise.resolve([])
-  return loadPlacesLibrary().then((places) => {
-    const svc = new places.AutocompleteService()
-    return new Promise((resolve) => {
-      svc.getPlacePredictions(
-        {
-          input: q,
-          sessionToken,
-        },
-        (preds, status) => {
-          if (!preds || status !== 'OK') return resolve([])
-          resolve(
-            preds.map((p) => ({
-              placeId: p.place_id,
-              main: p.structured_formatting?.main_text || p.description,
-              secondary: p.structured_formatting?.secondary_text || '',
-              description: p.description,
-              types: p.types || [],
-            })),
-          )
-        },
+  if (!q) return []
+  const places = await loadPlacesLibrary()
+
+  if (places.AutocompleteSuggestion?.fetchAutocompleteSuggestions) {
+    const request = { input: q }
+    if (sessionToken) request.sessionToken = sessionToken
+    const { suggestions = [] } =
+      await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+    latestPredictions.clear()
+    const out = []
+    for (const s of suggestions) {
+      const p = s.placePrediction
+      if (!p?.placeId) continue
+      latestPredictions.set(p.placeId, p)
+      out.push({
+        placeId: p.placeId,
+        main: p.mainText?.text || p.text?.text || '',
+        secondary: p.secondaryText?.text || '',
+        description: p.text?.text || '',
+        types: p.types || [],
+      })
+    }
+    return out
+  }
+
+  const svc = new places.AutocompleteService()
+  return new Promise((resolve, reject) => {
+    svc.getPlacePredictions({ input: q, sessionToken }, (preds, status) => {
+      if (status === 'ZERO_RESULTS') return resolve([])
+      if (!preds || status !== 'OK') return reject(new Error(`Places autocomplete: ${status}`))
+      resolve(
+        preds.map((p) => ({
+          placeId: p.place_id,
+          main: p.structured_formatting?.main_text || p.description,
+          secondary: p.structured_formatting?.secondary_text || '',
+          description: p.description,
+          types: p.types || [],
+        })),
       )
     })
-  }).catch(() => [])
+  })
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]))
+}
+
+/** Places (New) `Place` → the details shape the search UI expects. */
+async function resolvePlaceDetailsNew(places, placeId) {
+  const pred = latestPredictions.get(placeId)
+  const place = pred?.toPlace ? pred.toPlace() : new places.Place({ id: placeId })
+  await place.fetchFields({
+    fields: ['displayName', 'formattedAddress', 'location', 'viewport', 'types', 'photos', 'editorialSummary'],
+  })
+  if (!place.location) return null
+
+  let photoUrl = null
+  let photoAttribution = ''
+  const photo = place.photos?.[0]
+  if (photo) {
+    try {
+      photoUrl = photo.getURI({ maxWidth: 520, maxHeight: 360 })
+    } catch {
+      photoUrl = null
+    }
+    const author = photo.authorAttributions?.[0]
+    if (author?.displayName) {
+      photoAttribution = author.uri
+        ? `<a href="${escapeHtml(author.uri)}" target="_blank" rel="noopener noreferrer">${escapeHtml(author.displayName)}</a>`
+        : escapeHtml(author.displayName)
+    }
+  }
+
+  const vp = place.viewport?.toJSON?.() || null
+  return {
+    lat: place.location.lat(),
+    lng: place.location.lng(),
+    name: place.displayName || '',
+    formattedAddress: place.formattedAddress || '',
+    types: place.types || [],
+    viewport: vp ? { north: vp.north, east: vp.east, south: vp.south, west: vp.west } : null,
+    photoUrl,
+    photoAttribution,
+    description:
+      typeof place.editorialSummary === 'string'
+        ? place.editorialSummary
+        : place.editorialSummary?.text || '',
+  }
 }
 
 /**
- * Resolve a place id to `{ lat, lng, name, viewport }` using the legacy
- * PlacesService (still the most reliable source of viewport bounds for
- * cities / regions, which we use to frame the highlight ring).
+ * Resolve a place id to `{ lat, lng, name, viewport, ... }`. Viewport
+ * bounds frame the camera and the highlight ring (address → a block,
+ * city → the whole city).
  */
 export function resolvePlaceDetails(placeId, sessionToken) {
   if (!placeId) return Promise.resolve(null)
   return loadPlacesLibrary().then((places) => {
+    if (typeof places.Place === 'function') {
+      return resolvePlaceDetailsNew(places, placeId)
+    }
     const svc = new places.PlacesService(document.createElement('div'))
     return new Promise((resolve) => {
       svc.getDetails(

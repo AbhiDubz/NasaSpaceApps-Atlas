@@ -9,15 +9,11 @@
  * Intentionally sits in the left zone next to the ATLAS wordmark so the
  * center mission-clock and the right-hand icon cluster are untouched.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAtlasStore } from '../../store/atlasStore'
-import {
-  searchPlacePredictions,
-  resolvePlaceDetails,
-  newPlacesSessionToken,
-  fetchPlaceBoundary,
-} from '../../utils/googleMaps'
+import { newPlacesSessionToken, fetchPlaceBoundary } from '../../utils/googleMaps'
+import { searchPlaces, resolvePlace } from '../../utils/placeSearch'
 
 const IconSearch = ({ size = 14 }) => (
   <svg
@@ -87,7 +83,10 @@ export default function HeaderSearchBar() {
 
   const wrapRef = useRef(null)
   const inputRef = useRef(null)
+  const [source, setSource] = useState(null)
+
   const debounceRef = useRef(null)
+  const abortRef = useRef(null)
   const sessionTokenRef = useRef(null)
   const reqIdRef = useRef(0)
 
@@ -96,9 +95,12 @@ export default function HeaderSearchBar() {
   }, [])
 
   const closeAndReset = useCallback(() => {
+    reqIdRef.current++
+    abortRef.current?.abort()
     setOpen(false)
     setQuery('')
     setPredictions([])
+    setSource(null)
     setError(null)
     setHighlighted(0)
   }, [])
@@ -152,43 +154,66 @@ export default function HeaderSearchBar() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  /**
+   * Run one search for `q` and publish the results, unless a newer search
+   * started meanwhile. Returns the suggestions (empty on stale/failure).
+   */
+  const runSearch = useCallback(async (q) => {
+    const myReq = ++reqIdRef.current
+    abortRef.current?.abort()
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    setLoading(true)
+    try {
+      const { suggestions, source: from } = await searchPlaces(q, {
+        sessionToken: sessionTokenRef.current,
+        signal: ctrl.signal,
+      })
+      if (reqIdRef.current !== myReq) return []
+      setPredictions(suggestions)
+      setSource(from)
+      setHighlighted(0)
+      setError(null)
+      return suggestions
+    } catch (err) {
+      if (reqIdRef.current !== myReq || err?.name === 'AbortError') return []
+      setError('Search unavailable — check your connection')
+      setPredictions([])
+      setSource(null)
+      return []
+    } finally {
+      if (reqIdRef.current === myReq) setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (!open) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const q = query.trim()
     if (q.length < MIN_CHARS) {
+      reqIdRef.current++
+      abortRef.current?.abort()
       setPredictions([])
+      setSource(null)
+      setError(null)
       setLoading(false)
       return
     }
     setLoading(true)
-    const myReq = ++reqIdRef.current
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const results = await searchPlacePredictions(q, sessionTokenRef.current)
-        if (reqIdRef.current !== myReq) return
-        setPredictions(results)
-        setHighlighted(0)
-        setError(null)
-      } catch (err) {
-        if (reqIdRef.current !== myReq) return
-        setError('Search unavailable')
-        setPredictions([])
-      } finally {
-        if (reqIdRef.current === myReq) setLoading(false)
-      }
-    }, DEBOUNCE_MS)
+    debounceRef.current = setTimeout(() => runSearch(q), DEBOUNCE_MS)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [query, open])
+  }, [query, open, runSearch])
+
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   const selectPrediction = useCallback(
     async (pred) => {
       if (!pred) return
       setLoading(true)
       try {
-        const details = await resolvePlaceDetails(pred.placeId, sessionTokenRef.current)
+        const details = await resolvePlace(pred, { sessionToken: sessionTokenRef.current })
         if (!details) {
           setError('Could not resolve that place')
           return
@@ -250,6 +275,18 @@ export default function HeaderSearchBar() {
         closeAndReset()
         return
       }
+      // Enter before the debounced lookup lands (typed a full address and
+      // hit return): search now and jump straight to the best match.
+      if (e.key === 'Enter' && (loading || !predictions.length)) {
+        e.preventDefault()
+        const q = query.trim()
+        if (q.length < MIN_CHARS) return
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        runSearch(q).then((results) => {
+          if (results.length) selectPrediction(results[0])
+        })
+        return
+      }
       if (!predictions.length) return
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -262,13 +299,10 @@ export default function HeaderSearchBar() {
         selectPrediction(predictions[highlighted])
       }
     },
-    [predictions, highlighted, selectPrediction, closeAndReset],
+    [predictions, highlighted, selectPrediction, closeAndReset, loading, query, runSearch],
   )
 
-  const placeholder = useMemo(
-    () => 'Search a place…',
-    [],
-  )
+  const placeholder = 'Search an address or place…'
 
   return (
     <div ref={wrapRef} className={`hud-search ${open ? 'is-open' : ''}`}>
@@ -277,8 +311,8 @@ export default function HeaderSearchBar() {
           <motion.button
             key="search-trigger"
             type="button"
-            aria-label="Search place on map"
-            title="Search place  (press /)"
+            aria-label="Search an address or place on the map"
+            title="Search an address or place  (press /)"
             className="hud-icon-btn hud-search-trigger"
             onClick={() => {
               clearSearchHighlight()
@@ -305,6 +339,9 @@ export default function HeaderSearchBar() {
             </span>
             <input
               ref={inputRef}
+              // The field mounts only after the trigger's exit animation, so
+              // the open-effect's rAF focus can miss it; focus on mount instead.
+              autoFocus
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -313,7 +350,7 @@ export default function HeaderSearchBar() {
               spellCheck={false}
               autoComplete="off"
               className="hud-search-field__input"
-              aria-label="Search place"
+              aria-label="Search an address or place"
             />
             {query && (
               <button
@@ -353,7 +390,7 @@ export default function HeaderSearchBar() {
             {error && <div className="hud-search-status hud-search-status--error">{error}</div>}
             {predictions.map((p, i) => (
               <button
-                key={p.placeId}
+                key={p.id}
                 type="button"
                 className={`hud-search-item ${i === highlighted ? 'is-highlighted' : ''}`}
                 onMouseEnter={() => setHighlighted(i)}
@@ -377,6 +414,20 @@ export default function HeaderSearchBar() {
                 </span>
               </button>
             ))}
+            {source === 'osm' && predictions.length > 0 && (
+              <div className="hud-search-credit">
+                Results ©{' '}
+                <a
+                  href="https://www.openstreetmap.org/copyright"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  OpenStreetMap
+                </a>{' '}
+                contributors
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
