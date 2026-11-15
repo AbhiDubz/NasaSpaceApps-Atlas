@@ -2,7 +2,7 @@
  * Lucide icon for each NASA POWER theme. Kept out of variables.js, which the
  * API routes also import and should stay free of React.
  */
-import { CloudRain, Droplets, Haze, Snowflake, Sun, Thermometer } from 'lucide-react'
+import { CloudRain, Droplets, Haze, Leaf, Snowflake, Sun, Thermometer } from 'lucide-react'
 import { POWER_VARIABLES } from '../../services/nasaPower/variables.js'
 
 export const THEME_ICONS = {
@@ -12,6 +12,7 @@ export const THEME_ICONS = {
   snow: Snowflake,
   sun: Sun,
   air: Haze,
+  plants: Leaf,
 }
 
 /** Icon for a variable code, via its theme. */

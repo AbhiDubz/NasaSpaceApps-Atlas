@@ -18,7 +18,7 @@ describe('news tips', () => {
   it('suggests variables only when a country has enough matching headlines', () => {
     const bd = tipsForCountry(events, 'bd')
     expect(bd).toHaveLength(1)
-    expect(bd[0]).toMatchObject({ theme: 'flood', count: 2, variables: ['PRECTOTCORR'] })
+    expect(bd[0]).toMatchObject({ theme: 'flood', count: 2, variables: ['PRECTOTCORR', 'RUNOFF'] })
 
     const br = tipsForCountry(events, 'BR')
     expect(br.map((t) => t.theme)).toEqual(['drought']) // one heat headline is not enough

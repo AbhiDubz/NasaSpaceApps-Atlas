@@ -30,7 +30,10 @@ describe('fetchPower helpers', () => {
 
   it('parses variable lists and normalizes coordinates', () => {
     expect(parseVarList('t2m, snodp,bogus')).toEqual(['T2M', 'SNODP'])
-    expect(parseVarList('')).toHaveLength(8)
+    expect(parseVarList('')).toHaveLength(9)
+    // Instrument variables are not served by NASA POWER.
+    expect(parseVarList('ndvi,t2m')).toEqual(['T2M'])
+    expect(parseVarList('')).not.toContain('NDVI')
     expect(normalizeLatLng(47.4234, 238.59)).toEqual({ lat: 47.42, lng: -121.41 })
     expect(normalizeLatLng(95, 0)).toBeNull()
   })

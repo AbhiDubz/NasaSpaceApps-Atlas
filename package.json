@@ -31,6 +31,7 @@
     "earth-history:bake": "npm run earth-history:bake-textures && npm run earth-history:bake-paleodem && npm run earth-history:bake-coastlines && npm run earth-history:manifest",
     "earth-history:bake-all": "npm run earth-history:bake && npm run earth-history:bake-polities && npm run earth-history:bake-mosaic",
     "trend:demos": "node scripts/build-trend-demos.mjs",
+    "trend:grids": "node scripts/build-trend-grids.mjs",
     "trend:region": "node scripts/build-washington-region.mjs",
     "deploy": "npx vercel --prod",
     "deploy:preview": "npx vercel"
