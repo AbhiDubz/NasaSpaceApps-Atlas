@@ -776,6 +776,10 @@ export const useAtlasStore = create((set, get) => ({
       set({ countryContextMenu: null })
       return true
     }
+    if (s.askAtlasOpen) {
+      set({ askAtlasOpen: false })
+      return true
+    }
     if (s.ui.workbench) {
       s.closeWorkbench()
       return true
@@ -790,6 +794,11 @@ export const useAtlasStore = create((set, get) => ({
     }
     return false
   },
+
+  // ── Ask Atlas chatbot panel (conversation lives in components/Chat/chatStore.js) ──
+  askAtlasOpen: false,
+  openAskAtlas: () => set({ askAtlasOpen: true }),
+  closeAskAtlas: () => set({ askAtlasOpen: false }),
 
   // ── Trend Detective case file ──
   /**

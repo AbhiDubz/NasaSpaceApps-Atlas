@@ -76,8 +76,18 @@ export async function sendWebResponse(response, res) {
     if (key.toLowerCase() === 'transfer-encoding') return
     res.setHeader(key, value)
   })
-  const buf = Buffer.from(await response.arrayBuffer())
-  res.end(buf)
+  if (!response.body) {
+    res.end()
+    return
+  }
+  // Pipe chunk by chunk so streamed replies (/api/chat) are not held until the end.
+  const reader = response.body.getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    res.write(Buffer.from(value))
+  }
+  res.end()
 }
 
 /**

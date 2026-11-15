@@ -28,6 +28,7 @@ import LandingPage from './components/Landing/LandingPage'
 import WorkspaceDashboard from './components/Workspace/WorkspaceDashboard'
 import WorkspaceTimeline from './components/Workspace/WorkspaceTimeline'
 import TrendCaseFile, { TrendLauncher } from './components/Trend/TrendCaseFile'
+import AskAtlasPanel, { AskAtlasLauncher } from './components/Chat/AskAtlas'
 
 const GoogleGlobe = lazy(() => import('./components/Globe/GoogleGlobe'))
 const GlobeGLView = lazy(() => import('./components/Globe/GlobeGLView'))
@@ -346,7 +347,11 @@ function AtlasLiveApp() {
                   <Inspector />
                   <Workbench />
                   <TrendCaseFile />
-                  <TrendLauncher />
+                  <AskAtlasPanel />
+                  <div className="pointer-events-none fixed right-4 bottom-14 z-40 flex items-center gap-2 *:pointer-events-auto">
+                    <AskAtlasLauncher />
+                    <TrendLauncher />
+                  </div>
                   <StreetViewOverlay />
                   <YouTubeEmbedOverlay />
                   <HoverLabel />
