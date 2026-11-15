@@ -8,6 +8,9 @@
  * the same record with the seasons removed, the fitted trend, and a
  * plain-language verdict backed by a Mann-Kendall test.
  *
+ * With one place chosen, the panel first tests every variable there and lists
+ * what is changing (PlaceScan), so the user need not guess which to open.
+ *
  * Every case also tests the four seasons separately. When one season rises
  * and another falls at the same place, the panel says so and charts the two
  * side by side; any single season can be opened as its own test.
@@ -33,6 +36,7 @@ import { OUTSIDE_REGION_MESSAGE, REGION_BBOX, REGION_NAME } from '../../services
 import { gridCell } from '../../services/nasaPower/grid.js'
 import { TREND_PLACE_COLORS } from '../../hooks/useTrendOverlays'
 import { PlaceNewsTips, RegionNewsTips } from './NewsTips'
+import PlaceScan from './PlaceScan'
 import { THEME_ICONS, variableIcon } from './themeIcons'
 
 const PLACE_COLORS = TREND_PLACE_COLORS
@@ -594,6 +598,15 @@ export default function TrendCaseFile() {
             </div>
           )}
         </div>
+
+        {places.length === 1 ? (
+          <PlaceScan
+            place={places[0]}
+            variable={meta.code}
+            season={season}
+            onPickVariable={(code) => updateTrendCase({ variable: code, theme: null })}
+          />
+        ) : null}
 
         {places.length === 0 ? (
           <RegionNewsTips

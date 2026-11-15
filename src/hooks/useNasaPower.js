@@ -3,8 +3,9 @@
  *
  *   useNasaPower({ lat, lng, vars? }) → clean monthly series for a point
  *   useTrend({ lat, lng, variable, season? }) → deseasonalized series + trend test
+ *   useTrendScan({ lat, lng })        → the trend test for every variable at a point
  *
- * Both return `{ data, loading, error }`. Saved demo places load from static
+ * The first two return `{ data, loading, error }`. Saved demo places load from static
  * JSON in /trend-demos first, so they work without the live API.
  *
  * A season test is worked out in the browser from the whole-year record that
@@ -14,6 +15,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { demoCacheUrl, isCachedDemo } from '../services/nasaPower/demos.js'
 import { analyzeTrend, seasonById } from '../services/nasaPower/trendStats.js'
+import { POWER_VARIABLE_CODES } from '../services/nasaPower/variables.js'
 
 /** @type {Map<string, Promise<object>>} */
 const memo = new Map()
@@ -66,19 +68,18 @@ export function useNasaPower({ lat, lng, vars } = {}) {
   return useAsync(url, () => cachedJson(url))
 }
 
+const trendUrl = (lat, lng, variable) => `/api/trend?lat=${lat}&lng=${lng}&var=${variable}`
+
+/** Whole-year trend result for one variable: the saved copy when there is one, else the live API. */
+function loadTrend(lat, lng, variable) {
+  const live = () => cachedJson(trendUrl(lat, lng, variable))
+  if (!isCachedDemo(lat, lng, variable)) return live()
+  return cachedJson(demoCacheUrl(lat, lng, variable)).catch(live)
+}
+
 export function useTrend({ lat, lng, variable, season = 'all' } = {}) {
   const ok = Number.isFinite(lat) && Number.isFinite(lng) && Boolean(variable)
-  const url = ok ? `/api/trend?lat=${lat}&lng=${lng}&var=${variable}` : null
-  const year = useAsync(url, async () => {
-    if (isCachedDemo(lat, lng, variable)) {
-      try {
-        return await cachedJson(demoCacheUrl(lat, lng, variable))
-      } catch {
-        /* fall through to the live API */
-      }
-    }
-    return cachedJson(url)
-  })
+  const year = useAsync(ok ? trendUrl(lat, lng, variable) : null, () => loadTrend(lat, lng, variable))
 
   const data = useMemo(() => {
     const whole = year.data
@@ -88,4 +89,37 @@ export function useTrend({ lat, lng, variable, season = 'all' } = {}) {
   }, [year.data, season, variable])
 
   return { ...year, data }
+}
+
+const EMPTY_SCAN = {}
+
+/**
+ * Test every variable at one point. Returns `{ [code]: { data } | { error } }`,
+ * filling in as each result arrives; a missing code is still loading.
+ * Shares its requests with useTrend, so opening a variable afterwards is instant.
+ */
+export function useTrendScan({ lat, lng } = {}) {
+  const key = Number.isFinite(lat) && Number.isFinite(lng) ? `${lat},${lng}` : null
+  const [state, setState] = useState({ key: null, results: {} })
+
+  useEffect(() => {
+    if (!key) return undefined
+    let alive = true
+    for (const code of POWER_VARIABLE_CODES) {
+      loadTrend(lat, lng, code)
+        .then(
+          (data) => ({ data }),
+          (err) => ({ error: err?.message || 'Could not load data.' }),
+        )
+        .then((result) => {
+          if (!alive) return
+          setState((s) => ({ key, results: { ...(s.key === key ? s.results : {}), [code]: result } }))
+        })
+    }
+    return () => {
+      alive = false
+    }
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return state.key === key ? state.results : EMPTY_SCAN
 }
