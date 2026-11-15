@@ -22,7 +22,7 @@ import {
     DirectionalLight, AmbientLight, HemisphereLight,
     Sprite, SpriteMaterial, CanvasTexture,
     AdditiveBlending, Color,
-    MeshBasicMaterial,
+    MeshBasicMaterial, Mesh,
 } from 'three'
 import * as solar from 'solar-calculator'
 import { useAtlasStore } from '../../store/atlasStore'
@@ -230,6 +230,41 @@ function unitVecToLatLng(v) {
     return [lat, lng]
 }
 
+/** Slightly under the tiles so it never z-fights with them (tile chords sag ~0.06 % at radius 100). */
+const TILE_BACKDROP_SCALE = 0.998
+
+/**
+ * three-globe hides its globe mesh as soon as a tile URL is set, so the globe is black
+ * until tiles stream in. Keep a copy of the globe (same geometry and day/night material)
+ * just beneath the tile layer so the textured globe shows through while tiles load.
+ */
+function setTileBackdropVisible(globe, visible) {
+    let globeGroup = null
+    globe.scene()?.traverse((o) => {
+        if (!globeGroup && Object.prototype.hasOwnProperty.call(o, '__globeObjType') && o.__globeObjType === 'globe') {
+            globeGroup = o
+        }
+    })
+    if (!globeGroup) return
+    let backdrop = globeGroup.__atlasTileBackdrop
+    if (!backdrop) {
+        if (!visible) return
+        const globeMesh = globeGroup.children.find((c) => c.isMesh)
+        if (!globeMesh) return
+        backdrop = new Mesh(globeMesh.geometry, globeMesh.material)
+        backdrop.rotation.copy(globeMesh.rotation)
+        backdrop.scale.setScalar(TILE_BACKDROP_SCALE)
+        // Follow later geometry / material swaps (the day/night shader loads asynchronously)
+        backdrop.onBeforeRender = () => {
+            backdrop.geometry = globeMesh.geometry
+            backdrop.material = globeMesh.material
+        }
+        globeGroup.add(backdrop)
+        globeGroup.__atlasTileBackdrop = backdrop
+    }
+    backdrop.visible = visible
+}
+
 export default function GlobeGLView({ onGlobeReady }) {
     const containerRef = useRef(null)
     const globeRef = useRef(null)
@@ -239,6 +274,8 @@ export default function GlobeGLView({ onGlobeReady }) {
     const idleTimerRef = useRef(null)
     const animFrameRef = useRef(null)
     const lastZoomStoreEmitRef = useRef(0)
+    /** Last tile source the engine loaded, so its cache is only dropped when the source changes. */
+    const lastTileSourceRef = useRef(null)
 
     const dataLayers = useAtlasStore((s) => s.dataLayers)
     const tacticalMode = useAtlasStore((s) => s.tacticalMode)
@@ -785,16 +822,17 @@ export default function GlobeGLView({ onGlobeReady }) {
     useEffect(() => {
         const globe = globeRef.current
         if (!globe) return
-        if (gibsImageryKey) {
-            globe.globeTileEngineUrl(gibsTileEngineUrlForKey(gibsImageryKey))
-            globe.globeTileEngineClearCache?.()
-        } else if (closeZoom) {
-            globe.globeTileEngineUrl(SATELLITE_TILE_URL)
-            globe.globeTileEngineClearCache?.()
-        } else {
-            globe.globeTileEngineUrl(null)
+        const source = gibsImageryKey ? `gibs:${gibsImageryKey}` : closeZoom ? 'satellite' : null
+        // Keep loaded tiles across zoom-in/zoom-out crossings so going back in shows them at once;
+        // only a different source needs a fresh cache.
+        if (source && lastTileSourceRef.current && lastTileSourceRef.current !== source) {
             globe.globeTileEngineClearCache?.()
         }
+        if (source) lastTileSourceRef.current = source
+        globe.globeTileEngineUrl(
+            gibsImageryKey ? gibsTileEngineUrlForKey(gibsImageryKey) : closeZoom ? SATELLITE_TILE_URL : null,
+        )
+        setTileBackdropVisible(globe, !!source)
         // Tiles are only requested when the camera moves — nudge it so a still view fills in
         globe.controls()?.dispatchEvent({ type: 'change' })
     }, [gibsImageryKey, closeZoom])
