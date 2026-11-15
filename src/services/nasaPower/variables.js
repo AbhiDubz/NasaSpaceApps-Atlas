@@ -16,12 +16,13 @@ export const POWER_CREDIT =
  * @property {string} code
  * @property {string} label
  * @property {string} unit
- * @property {'heat'|'rain'|'water'|'snow'|'sun'} theme
+ * @property {'heat'|'rain'|'water'|'snow'|'sun'|'air'} theme
  * @property {string} definition — plain-language, for students and the public
  * @property {string} rising
  * @property {string} falling
  * @property {number} decimals — digits shown for a per-decade rate
  * @property {number} [startYear]
+ * @property {string} [seasonNote] — background shown when seasons trend in opposite directions
  */
 
 /** @type {Record<string, PowerVariable>} */
@@ -97,6 +98,20 @@ export const POWER_VARIABLES = {
     decimals: 3,
     startYear: 1984,
   },
+  AOD_55: {
+    code: 'AOD_55',
+    label: 'Haze in the air',
+    unit: '(optical depth)',
+    theme: 'air',
+    definition:
+      'How much dust, smoke and pollution hangs in the air, measured by how much sunlight it blocks on the way down (aerosol optical depth). Below 0.1 is very clear; above 0.3 looks hazy. Records start in 2001.',
+    rising: 'Air getting hazier',
+    falling: 'Air getting clearer',
+    decimals: 3,
+    startYear: 2001,
+    seasonNote:
+      'Possible reasons, from published research: spring haze here is partly dust and pollution carried across the Pacific from Asia, where emissions have fallen. Summer haze is mostly wildfire smoke, which has grown. This tool tests the trend; it cannot prove the cause.',
+  },
 }
 
 export const POWER_VARIABLE_CODES = Object.keys(POWER_VARIABLES)
@@ -107,6 +122,7 @@ export const POWER_THEMES = [
   { id: 'water', label: 'Water' },
   { id: 'snow', label: 'Snow' },
   { id: 'sun', label: 'Sun' },
+  { id: 'air', label: 'Air' },
 ]
 
 /** Variables suggested for a curiosity theme (primary matches first, then close relatives). */
@@ -116,6 +132,7 @@ const THEME_RELATED = {
   water: ['GWETROOT', 'RH2M', 'PRECTOTCORR'],
   snow: ['SNODP', 'T2M', 'PRECTOTCORR'],
   sun: ['ALLSKY_SFC_SW_DWN', 'T2M_MAX'],
+  air: ['AOD_55', 'ALLSKY_SFC_SW_DWN'],
 }
 
 export function variablesForTheme(theme) {

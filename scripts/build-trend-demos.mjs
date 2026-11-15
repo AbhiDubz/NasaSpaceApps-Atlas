@@ -36,6 +36,11 @@ for (const place of places) {
       anomalies: result.anomalies.map((v) => round(v)),
       trendLine: result.trendLine.map((v) => round(v)),
       climatology: result.climatology.map((v) => round(v)),
+      seasons: result.seasons.map((s) => ({
+        ...s,
+        values: s.values.map((v) => round(v)),
+        trendLine: s.trendLine.map((v) => round(v)),
+      })),
       credit: POWER_CREDIT,
       cached: true,
     }

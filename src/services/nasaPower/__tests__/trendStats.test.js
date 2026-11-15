@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeTrend, deseasonalize, linearRegression, mannKendallSen, normalCdf } from '../trendStats.js'
+import { analyzeTrend, deseasonalize, linearRegression, mannKendallSen, normalCdf, seasonalMeans, SEASONS } from '../trendStats.js'
 import { buildMonthAxis, cleanSeries } from '../fetchPower.js'
 import { normalizeLatLng, parseVarList } from '../variables.js'
 
@@ -30,7 +30,7 @@ describe('fetchPower helpers', () => {
 
   it('parses variable lists and normalizes coordinates', () => {
     expect(parseVarList('t2m, snodp,bogus')).toEqual(['T2M', 'SNODP'])
-    expect(parseVarList('')).toHaveLength(7)
+    expect(parseVarList('')).toHaveLength(8)
     expect(normalizeLatLng(47.4234, 238.59)).toEqual({ lat: 47.42, lng: -121.41 })
     expect(normalizeLatLng(95, 0)).toBeNull()
   })
@@ -109,3 +109,88 @@ describe('trend statistics', () => {
     expect(mannKendallSen(t, red).varianceCorrection).toBeGreaterThan(1.5)
   })
 })
+
+describe('season trends', () => {
+  const spring = SEASONS.find((x) => x.id === 'spring')
+  const winter = SEASONS.find((x) => x.id === 'winter')
+  const hazeMonths = buildMonthAxis(2001, 2025)
+
+  /** Spring falls by 0.02 per decade, summer rises by 0.03; spring starts higher. */
+  function flipSeries(seed = 11) {
+    const rnd = lcg(seed)
+    return hazeMonths.map((ym, i) => {
+      const m = Number(ym.slice(5, 7))
+      const years = i / 12
+      const base = m >= 3 && m <= 5 ? 0.17 - 0.002 * years : m >= 6 && m <= 8 ? 0.1 + 0.003 * years : 0.08
+      return base + 0.01 * rnd()
+    })
+  }
+
+  it('averages the three months of a season, one value per year', () => {
+    const axis = buildMonthAxis(2001, 2003)
+    const values = axis.map((_, i) => i) // Jan 2001 = 0 … Dec 2003 = 35
+    const s = seasonalMeans(axis, values, spring)
+    expect(s.years).toEqual([2001, 2002, 2003])
+    expect(s.values).toEqual([3, 15, 27])
+  })
+
+  it('counts December toward the next winter and skips incomplete seasons', () => {
+    const axis = buildMonthAxis(2001, 2003)
+    const values = axis.map((_, i) => (i === 13 ? null : i)) // Feb 2002 missing
+    const w = seasonalMeans(axis, values, winter)
+    // 2001 has no December before it; 2002 is missing February; 2003 = Dec 2002, Jan 2003, Feb 2003.
+    expect(w.values).toEqual([null, null, (23 + 24 + 25) / 3])
+  })
+
+  it('tests one season on yearly averages', () => {
+    const out = analyzeTrend({ code: 'AOD_55', months: hazeMonths, values: flipSeries(), season: 'spring' })
+    expect(out.step).toBe('year')
+    expect(out.season).toBe('spring')
+    expect(out.months).toHaveLength(25)
+    expect(out.months[0]).toBe('2001')
+    expect(out.monthsUsed).toBe(25)
+    expect(out.slopePerDecade).toBeCloseTo(-0.02, 2)
+    expect(out.significant).toBe(true)
+    expect(out.verdict).toMatch(/^Air getting clearer in spring: 0\.0\d+ per decade, statistically significant/)
+    expect(out.trendLine).toHaveLength(25)
+  })
+
+  it('scans all four seasons and flags opposite trends', () => {
+    const out = analyzeTrend({ code: 'AOD_55', months: hazeMonths, values: flipSeries() })
+    expect(out.season).toBe('all')
+    expect(out.step).toBe('month')
+    expect(out.seasons.map((x) => x.id)).toEqual(['winter', 'spring', 'summer', 'fall'])
+    const byId = Object.fromEntries(out.seasons.map((x) => [x.id, x]))
+    expect(byId.spring.direction).toBe('falling')
+    expect(byId.summer.direction).toBe('rising')
+    expect(byId.summer.slopePerDecade).toBeCloseTo(0.03, 2)
+    expect(byId.winter.significant).toBe(false)
+    expect(byId.winter.yearsUsed).toBe(24)
+    // Trend lines are in the variable's own units, so they can be charted with the yearly averages.
+    expect(byId.spring.trendLine[0]).toBeCloseTo(0.17, 1)
+    expect(out.oppositeSeasons).toMatchObject({ rising: 'summer', falling: 'spring' })
+    // 0.17 − 0.002·y = 0.10 + 0.003·y → y = 14 → crosses about 2015.
+    expect(out.oppositeSeasons.crossYear).toBeGreaterThanOrEqual(2013)
+    expect(out.oppositeSeasons.crossYear).toBeLessThanOrEqual(2017)
+  })
+
+  it('does not flag opposite trends when every season moves the same way', () => {
+    const out = analyzeTrend({ code: 'T2M', months, values: synthetic({ slopePerDecade: 0.3 }) })
+    expect(out.seasons.every((x) => x.direction === 'rising')).toBe(true)
+    expect(out.oppositeSeasons).toBeNull()
+  })
+
+  it('reports when a season has too few years', () => {
+    const short = buildMonthAxis(2001, 2008)
+    const out = analyzeTrend({ code: 'AOD_55', months: short, values: short.map(() => 0.1), season: 'summer' })
+    expect(out.slopePerDecade).toBeNull()
+    expect(out.verdict).toMatch(/Not enough data here to test a summer trend \(8 usable years/)
+  })
+
+  it('ignores an unknown season', () => {
+    const out = analyzeTrend({ code: 'T2M', months, values: synthetic({ slopePerDecade: 0.3 }), season: 'monsoon' })
+    expect(out.season).toBe('all')
+    expect(out.months).toHaveLength(540)
+  })
+})
+

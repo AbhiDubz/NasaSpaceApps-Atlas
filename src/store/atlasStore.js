@@ -793,8 +793,9 @@ export const useAtlasStore = create((set, get) => ({
 
   // ── Trend Detective case file ──
   /**
-   * `{ places: [{lat,lng,label?}, …up to 2], variable, theme, pickingCompare, outsideClick }`
+   * `{ places: [{lat,lng,label?}, …up to 2], variable, season, theme, pickingCompare, outsideClick }`
    * or null when the panel is closed. `places` may be empty (guided start).
+   * `season` is 'all' (whole year) or winter | spring | summer | fall.
    * Places are limited to Washington State; `outsideClick` holds the last
    * click that fell outside it, so the panel can say why nothing happened.
    */
@@ -803,6 +804,7 @@ export const useAtlasStore = create((set, get) => ({
     trendCase: {
       places: init.places || s.trendCase?.places || [],
       variable: init.variable || s.trendCase?.variable || 'T2M',
+      season: init.season || s.trendCase?.season || 'all',
       theme: init.theme !== undefined ? init.theme : s.trendCase?.theme ?? null,
       pickingCompare: false,
       outsideClick: null,
@@ -823,6 +825,7 @@ export const useAtlasStore = create((set, get) => ({
         trendCase: {
           places: cur?.places || [],
           variable: cur?.variable || 'T2M',
+          season: cur?.season || 'all',
           theme: cur?.theme ?? null,
           pickingCompare: cur?.pickingCompare || false,
           outsideClick: { lat, lng },
@@ -837,6 +840,7 @@ export const useAtlasStore = create((set, get) => ({
       trendCase: {
         places: [place],
         variable: cur?.variable || 'T2M',
+        season: cur?.season || 'all',
         theme: cur?.theme ?? null,
         pickingCompare: false,
         outsideClick: null,

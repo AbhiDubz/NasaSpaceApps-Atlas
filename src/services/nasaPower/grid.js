@@ -2,26 +2,33 @@
  * The NASA POWER grid cell a point's data actually comes from.
  *
  * POWER does not interpolate: a point request returns the value of the
- * source-model cell that contains it. Checked against the live API
- * (e.g. Seattle → 47.25–47.75°N, 122.8125–122.1875°W for MERRA-2;
- * 47–48°N, 123–122°W for sunlight).
+ * source cell that contains it. Checked against the live API by finding
+ * where the returned record changes.
  *
  *   MERRA-2 (temperature, rain, humidity, soil, snow): 0.5° lat × 0.625° lon,
  *     cell centers on multiples of 0.5° / 0.625° from (-90, -180).
- *   CERES SYN1deg (surface sunlight): 1° × 1°, cell edges on whole degrees.
+ *     Seattle → 47.25–47.75°N, 122.8125–122.1875°W.
+ *   CERES SYN1deg (surface sunlight): 1° lat, edges on whole degrees. CERES
+ *     widens its cells toward the poles: 1° lon up to 45° latitude, 2° lon
+ *     beyond it (all of Washington). Seattle → 47–48°N, 124–122°W.
+ *   CERES SYN1deg aerosols (haze): 2° × 2°, edges on even degrees.
+ *     Seattle → 46–48°N, 124–122°W. Checked across Washington only.
  */
 
 const KM_PER_DEG_LAT = 111.32
 
-/** @type {Record<string, { source: string, dLat: number, dLng: number, centered: boolean }>} */
+/** @type {Record<string, { source: string, dLat: number, dLng: number | ((lat: number) => number), centered: boolean }>} */
 const GRIDS = {
   merra2: { source: 'MERRA-2', dLat: 0.5, dLng: 0.625, centered: true },
-  ceres: { source: 'CERES SYN1deg', dLat: 1, dLng: 1, centered: false },
+  ceres: { source: 'CERES SYN1deg', dLat: 1, dLng: (lat) => (Math.abs(lat) >= 45 ? 2 : 1), centered: false },
+  ceresAerosol: { source: 'CERES SYN1deg aerosol', dLat: 2, dLng: 2, centered: false },
 }
 
 /** Which grid a variable is served on. */
 export function gridFor(variable) {
-  return variable === 'ALLSKY_SFC_SW_DWN' ? GRIDS.ceres : GRIDS.merra2
+  if (variable === 'ALLSKY_SFC_SW_DWN') return GRIDS.ceres
+  if (variable === 'AOD_55') return GRIDS.ceresAerosol
+  return GRIDS.merra2
 }
 
 /** Snap a coordinate to its cell: [lower, upper] edges. */
@@ -44,7 +51,8 @@ const round = (v) => Math.round(v * 1e4) / 1e4
 export function gridCell(lat, lng, variable) {
   const g = gridFor(variable)
   const [south, north] = snap(lat, -90, g.dLat, g.centered)
-  const [west, east] = snap(lng, -180, g.dLng, g.centered)
+  const dLng = typeof g.dLng === 'function' ? g.dLng((south + north) / 2) : g.dLng
+  const [west, east] = snap(lng, -180, dLng, g.centered)
   const midLat = ((south + north) / 2) * (Math.PI / 180)
   return {
     north: round(Math.min(north, 90)),
@@ -53,9 +61,9 @@ export function gridCell(lat, lng, variable) {
     west: round(west),
     source: g.source,
     dLat: g.dLat,
-    dLng: g.dLng,
+    dLng,
     kmNS: Math.round(g.dLat * KM_PER_DEG_LAT),
-    kmEW: Math.round(g.dLng * KM_PER_DEG_LAT * Math.cos(midLat)),
+    kmEW: Math.round(dLng * KM_PER_DEG_LAT * Math.cos(midLat)),
   }
 }
 

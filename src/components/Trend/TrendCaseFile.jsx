@@ -7,29 +7,38 @@
  * Click anywhere in Washington State (the study region) → pick a variable → see the monthly record,
  * the same record with the seasons removed, the fitted trend, and a
  * plain-language verdict backed by a Mann-Kendall test.
+ *
+ * Every case also tests the four seasons separately. When one season rises
+ * and another falls at the same place, the panel says so and charts the two
+ * side by side; any single season can be opened as its own test.
  */
 import { useMemo } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { GitCompareArrows, MapPin, Search, X } from 'lucide-react'
+import { GitCompareArrows, MapPin, Minus, Search, TrendingDown, TrendingUp, X } from 'lucide-react'
 import { useAtlasStore } from '../../store/atlasStore'
 import { useTrend } from '../../hooks/useNasaPower'
 import { cn } from '../../lib/utils'
 import {
   POWER_CREDIT,
+  POWER_END_YEAR,
+  POWER_START_YEAR,
   POWER_THEMES,
   POWER_VARIABLES,
   POWER_VARIABLE_CODES,
   variablesForTheme,
 } from '../../services/nasaPower/variables.js'
 import { TREND_DEMOS, demoPlaceLabel } from '../../services/nasaPower/demos.js'
-import { fmtP } from '../../services/nasaPower/trendStats.js'
+import { fmtP, SEASONS, seasonById } from '../../services/nasaPower/trendStats.js'
 import { OUTSIDE_REGION_MESSAGE, REGION_BBOX, REGION_NAME } from '../../services/nasaPower/region.js'
 import { gridCell } from '../../services/nasaPower/grid.js'
 import { TREND_PLACE_COLORS } from '../../hooks/useTrendOverlays'
 import { PlaceNewsTips, RegionNewsTips } from './NewsTips'
+import { THEME_ICONS, variableIcon } from './themeIcons'
 
 const PLACE_COLORS = TREND_PLACE_COLORS
 const TREND_COLOR = '#facc15'
+const SEASON_COLORS = { winter: '#93c5fd', spring: '#4ade80', summer: '#f87171', fall: '#c4b5fd' }
+const SEASON_OPTIONS = [{ id: 'all', label: 'Whole year' }, ...SEASONS]
 const AXIS_TICK = { fill: 'rgba(226,232,240,0.6)', fontSize: 11 }
 const GRID_STROKE = 'rgba(255,255,255,0.08)'
 const TOOLTIP_STYLE = {
@@ -57,6 +66,12 @@ function signed(v, decimals) {
   return `${v > 0 ? '+' : v < 0 ? '−' : ''}${s}`
 }
 
+/** Drop the empty stretch before a record begins (haze starts in 2001, sunlight in 1984). */
+function fromFirstValue(rows, valueOf) {
+  const first = rows.findIndex((r) => valueOf(r) != null)
+  return first > 0 ? rows.slice(first) : rows
+}
+
 /**
  * Y range that ignores the most extreme 1% of months, so a single freak
  * value cannot flatten the whole chart. Returns how many months fall outside.
@@ -73,7 +88,7 @@ function robustDomain(rows, key) {
   return { domain: [min, max], clipped }
 }
 
-function SeriesChart({ rows, color, unit, height, showTrend, yearTicks }) {
+function SeriesChart({ rows, color, unit, height, showTrend, yearTicks, yearly, digits = 2 }) {
   const { domain, clipped } = useMemo(() => robustDomain(rows, showTrend ? 'anomaly' : 'value'), [rows, showTrend])
   return (
     <>
@@ -86,17 +101,17 @@ function SeriesChart({ rows, color, unit, height, showTrend, yearTicks }) {
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
             labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
-            formatter={(v, name) => [`${Number(v).toFixed(2)} ${unit}`, name]}
+            formatter={(v, name) => [`${Number(v).toFixed(digits)} ${unit}`, name]}
           />
           {showTrend ? <ReferenceLine y={0} stroke="rgba(255,255,255,0.3)" /> : null}
           <Line
             type="linear"
             dataKey={showTrend ? 'anomaly' : 'value'}
-            name={showTrend ? 'Difference from normal' : 'Monthly value'}
+            name={showTrend ? 'Difference from normal' : yearly ? 'Season average' : 'Monthly value'}
             stroke={color}
             strokeWidth={1}
             strokeOpacity={showTrend ? 0.75 : 1}
-            dot={false}
+            dot={yearly ? { r: 2, fill: color, strokeWidth: 0 } : false}
             isAnimationActive={false}
             connectNulls={false}
           />
@@ -116,10 +131,152 @@ function SeriesChart({ rows, color, unit, height, showTrend, yearTicks }) {
     </div>
     {clipped ? (
       <p className="text-sm leading-normal text-muted">
-        {clipped} extreme {clipped === 1 ? 'month runs' : 'months run'} off this chart. The trend test still counts {clipped === 1 ? 'it' : 'them'}, and is built to not be thrown by outliers.
+        {clipped} extreme {yearly ? (clipped === 1 ? 'year runs' : 'years run') : clipped === 1 ? 'month runs' : 'months run'} off this chart. The trend test still counts {clipped === 1 ? 'it' : 'them'}, and is built to not be thrown by outliers.
       </p>
     ) : null}
     </>
+  )
+}
+
+/** Two seasons at one place: yearly averages (thin, dotted) and their trend lines (dashed). */
+function SeasonPairChart({ falling, rising, unit, digits }) {
+  const rows = useMemo(
+    () =>
+      fromFirstValue(
+        falling.years.map((year, i) => ({
+          year,
+          falling: falling.values[i],
+          fallingTrend: falling.trendLine[i],
+          rising: rising.values[i],
+          risingTrend: rising.trendLine[i],
+        })),
+        (r) => r.falling ?? r.rising,
+      ),
+    [falling, rising],
+  )
+  const ticks = rows.filter((r) => r.year % 5 === 0).map((r) => r.year)
+  const pair = [
+    { key: 'falling', season: falling },
+    { key: 'rising', season: rising },
+  ]
+  return (
+    <div style={{ height: 170 }} className="w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+          <XAxis dataKey="year" ticks={ticks} tick={AXIS_TICK} />
+          <YAxis tick={AXIS_TICK} width={44} domain={['auto', 'auto']} tickFormatter={(v) => Number(v.toPrecision(2))} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
+            formatter={(v, name) => [`${Number(v).toFixed(digits)} ${unit}`, name]}
+          />
+          {pair.map(({ key, season }) => (
+            <Line
+              key={key}
+              type="linear"
+              dataKey={key}
+              name={`${season.label} average`}
+              stroke={SEASON_COLORS[season.id]}
+              strokeWidth={1}
+              strokeOpacity={0.8}
+              dot={{ r: 2, fill: SEASON_COLORS[season.id], strokeWidth: 0 }}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+          ))}
+          {pair.map(({ key, season }) => (
+            <Line
+              key={`${key}Trend`}
+              type="linear"
+              dataKey={`${key}Trend`}
+              name={`${season.label} trend`}
+              stroke={SEASON_COLORS[season.id]}
+              strokeWidth={2.5}
+              strokeDasharray="6 4"
+              dot={false}
+              isAnimationActive={false}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1)
+
+/**
+ * The four seasons tested one by one. Each tile opens that season's own
+ * test; opposite significant trends get a callout and a side-by-side chart.
+ */
+function SeasonScan({ data, meta, unit, season, compact, showNotes, onPickSeason }) {
+  const seasons = data.seasons
+  if (!seasons?.length) return null
+  const d = meta.decimals
+  const opp = data.oppositeSeasons
+  const falling = opp ? seasons.find((s) => s.id === opp.falling) : null
+  const rising = opp ? seasons.find((s) => s.id === opp.rising) : null
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm leading-normal text-muted">
+        The same place, one season at a time (change per decade{unit ? `, ${unit}` : ''}). Pick a season to open its test.
+      </p>
+      <div className="grid grid-cols-4 gap-2" role="group" aria-label="Season trends">
+        {seasons.map((s) => {
+          const Icon = s.direction === 'rising' ? TrendingUp : s.direction === 'falling' ? TrendingDown : Minus
+          return (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={season === s.id}
+              className={cn(BTN, 'h-auto flex-col gap-0 px-1! py-2!', season === s.id ? BTN_ACTIVE : BTN_IDLE)}
+              onClick={() => onPickSeason(season === s.id ? 'all' : s.id)}
+            >
+              <span className="flex items-center gap-1 text-sm text-text">
+                <span className="h-2 w-2 rounded-full" style={{ background: SEASON_COLORS[s.id] }} aria-hidden="true" />
+                {s.label}
+              </span>
+              <span className={cn('flex items-center gap-1 font-data text-sm font-semibold', s.significant ? 'text-text' : 'text-muted')}>
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {signed(s.slopePerDecade, d)}
+              </span>
+              <span className={cn('text-sm', s.significant ? 'text-emerald-300' : 'text-muted')}>
+                {s.slopePerDecade == null ? 'too short' : s.significant ? 'significant' : 'not yet'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {falling && rising ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-accent-border bg-accent-dim px-3! py-3!">
+          <p className="text-sm font-semibold uppercase tracking-wide text-muted">Opposite trends in one place</p>
+          <p className="text-base leading-normal text-text">
+            <span style={{ color: SEASON_COLORS[falling.id] }}>{falling.label}</span>: {lowerFirst(meta.falling)}.{' '}
+            <span style={{ color: SEASON_COLORS[rising.id] }}>{rising.label}</span>: {lowerFirst(meta.rising)}. A whole-year test blends the two together.
+          </p>
+          {!compact ? (
+            <>
+              <SeasonPairChart falling={falling} rising={rising} unit={unit} digits={Math.max(2, d)} />
+              <p className="text-sm leading-normal text-muted">
+                Each dot is one season's average; dashed lines are the trends.
+                {opp.crossYear
+                  ? ` The trend lines cross around ${opp.crossYear}: ${falling.label.toLowerCase()} used to have the higher values, and now ${rising.label.toLowerCase()} does.`
+                  : ''}
+              </p>
+            </>
+          ) : null}
+          {showNotes && meta.seasonNote ? <p className="text-sm leading-normal text-muted">{meta.seasonNote}</p> : null}
+        </div>
+      ) : null}
+      {showNotes ? (
+        <p className="text-sm leading-normal text-muted">
+          Four seasons means four tests, so one of them can look significant by luck. Trust a season more when its neighbors agree or the result is far below p = 0.05.
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -133,28 +290,37 @@ function Stat({ label, value, hint }) {
   )
 }
 
-function CaseSection({ place, variable, color, compact, onRemove }) {
+function CaseSection({ place, variable, season, color, compact, showNotes = true, onRemove, onPickSeason }) {
   const meta = POWER_VARIABLES[variable]
-  const { data, loading, error } = useTrend({ lat: place.lat, lng: place.lng, variable })
+  const { data, loading, error } = useTrend({ lat: place.lat, lng: place.lng, variable, season })
+  // One point per year when a single season is being tested.
+  const yearly = data?.step === 'year'
+  const seasonName = yearly ? data.seasonLabel.toLowerCase() : null
 
   const rows = useMemo(() => {
     if (!data?.months) return []
-    return data.months.map((month, i) => ({
+    const all = data.months.map((month, i) => ({
       month,
       value: data.values[i],
       anomaly: data.anomalies[i],
       trend: data.trendLine[i],
     }))
+    return fromFirstValue(all, (r) => r.value)
   }, [data])
 
   const yearTicks = useMemo(
-    () => rows.filter((r) => r.month.endsWith('-01') && Number(r.month.slice(0, 4)) % 10 === 0).map((r) => r.month),
-    [rows],
+    () =>
+      rows
+        .filter((r) => (yearly ? Number(r.month) % 5 === 0 : r.month.endsWith('-01') && Number(r.month.slice(0, 4)) % 10 === 0))
+        .map((r) => r.month),
+    [rows, yearly],
   )
 
   const unit = meta.unit.startsWith('(') ? '' : meta.unit
   const d = meta.decimals
+  const digits = Math.max(2, d)
   const cell = gridCell(place.lat, place.lng, variable)
+  const recordYears = POWER_END_YEAR - (meta.startYear || POWER_START_YEAR) + 1
 
   return (
     <section className="flex flex-col gap-3" aria-label={`Trend at ${placeName(place)}`}>
@@ -182,7 +348,7 @@ function CaseSection({ place, variable, color, compact, onRemove }) {
 
       {loading ? (
         <p className="rounded-lg border border-line bg-surface px-3! py-6! text-center text-sm text-muted" role="status">
-          Pulling 45 years of NASA records…
+          Pulling {recordYears} years of NASA records…
         </p>
       ) : error ? (
         <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3! py-3! text-sm leading-normal text-red-200" role="alert">
@@ -197,7 +363,8 @@ function CaseSection({ place, variable, color, compact, onRemove }) {
             )}
           >
             <p className="text-sm font-semibold uppercase tracking-wide text-muted">
-              Verdict{data.significant ? ' · significant' : data.slopePerDecade == null ? '' : ' · not significant yet'}
+              Verdict{yearly ? ` · ${seasonName} only (${data.seasonSpan})` : ' · whole year'}
+              {data.significant ? ' · significant' : data.slopePerDecade == null ? '' : ' · not significant yet'}
             </p>
             <p className="mt-1! text-base leading-normal text-text">{data.verdict}</p>
           </div>
@@ -219,21 +386,27 @@ function CaseSection({ place, variable, color, compact, onRemove }) {
             </div>
           ) : null}
 
+          <SeasonScan data={data} meta={meta} unit={unit} season={season} compact={compact || yearly} showNotes={showNotes} onPickSeason={onPickSeason} />
+
           <div>
             <p className="mb-1! text-sm text-muted">
-              With the seasons removed ({unit || 'index'}, difference from that month's normal) and the{' '}
+              {yearly
+                ? `Each ${seasonName}'s average (${data.seasonSpan}), as the difference from a normal ${seasonName} (${unit || 'index'}), and the `
+                : `With the seasons removed (${unit || 'index'}, difference from that month's normal) and the `}
               <span style={{ color: TREND_COLOR }}>trend line</span>
             </p>
-            <SeriesChart rows={rows} color={color} unit={unit} height={compact ? 150 : 180} showTrend yearTicks={yearTicks} />
+            <SeriesChart rows={rows} color={color} unit={unit} height={compact ? 150 : 180} showTrend yearTicks={yearTicks} yearly={yearly} digits={digits} />
           </div>
           {!compact ? (
             <div>
-              <p className="mb-1! text-sm text-muted">What was measured each month ({unit || 'index'})</p>
-              <SeriesChart rows={rows} color={color} unit={unit} height={140} yearTicks={yearTicks} />
+              <p className="mb-1! text-sm text-muted">
+                What was measured each {yearly ? seasonName : 'month'} ({unit || 'index'})
+              </p>
+              <SeriesChart rows={rows} color={color} unit={unit} height={140} yearTicks={yearTicks} yearly={yearly} digits={digits} />
             </div>
           ) : null}
           <p className="text-sm leading-normal text-muted">
-            {data.monthsUsed} months tested, {data.firstMonth?.slice(0, 4)}–{data.lastMonth?.slice(0, 4)}
+            {data.monthsUsed} {yearly ? `${seasonName}s` : 'months'} tested, {data.firstMonth?.slice(0, 4)}–{data.lastMonth?.slice(0, 4)}
             {data.cached ? ' · saved copy' : ''}
           </p>
         </>
@@ -277,6 +450,7 @@ export default function TrendCaseFile() {
 
   if (!trendCase) return null
   const { places, variable, theme, pickingCompare, outsideClick } = trendCase
+  const season = seasonById(trendCase.season)?.id || 'all'
   const meta = POWER_VARIABLES[variable] || POWER_VARIABLES.T2M
   const options = theme ? variablesForTheme(theme) : POWER_VARIABLE_CODES.map((c) => POWER_VARIABLES[c])
   const comparing = places.length > 1
@@ -288,7 +462,12 @@ export default function TrendCaseFile() {
   }
 
   const openDemo = (demo) => {
-    openTrendCase({ places: demo.places, variable: demo.variable, theme: POWER_VARIABLES[demo.variable].theme })
+    openTrendCase({
+      places: demo.places,
+      variable: demo.variable,
+      season: demo.season || 'all',
+      theme: POWER_VARIABLES[demo.variable].theme,
+    })
     if (demo.places.length > 1) {
       flyToRegion(flyToLocation)
       return
@@ -322,17 +501,21 @@ export default function TrendCaseFile() {
         <div className="flex flex-col gap-2">
           <p className="text-sm font-semibold text-text">1. What are you curious about?</p>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Topic">
-            {POWER_THEMES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                aria-pressed={theme === t.id}
-                className={cn(BTN, theme === t.id ? BTN_ACTIVE : BTN_IDLE)}
-                onClick={() => chooseTheme(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
+            {POWER_THEMES.map((t) => {
+              const Icon = THEME_ICONS[t.id]
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={theme === t.id}
+                  className={cn(BTN, theme === t.id ? BTN_ACTIVE : BTN_IDLE)}
+                  onClick={() => chooseTheme(t.id)}
+                >
+                  {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
+                  {t.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -341,17 +524,21 @@ export default function TrendCaseFile() {
             2. {theme ? 'Suggested things to measure' : 'What to measure'}
           </p>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Variable">
-            {options.map((v) => (
-              <button
-                key={v.code}
-                type="button"
-                aria-pressed={variable === v.code}
-                className={cn(BTN, variable === v.code ? BTN_ACTIVE : BTN_IDLE)}
-                onClick={() => updateTrendCase({ variable: v.code })}
-              >
-                {v.label}
-              </button>
-            ))}
+            {options.map((v) => {
+              const Icon = variableIcon(v.code)
+              return (
+                <button
+                  key={v.code}
+                  type="button"
+                  aria-pressed={variable === v.code}
+                  className={cn(BTN, variable === v.code ? BTN_ACTIVE : BTN_IDLE)}
+                  onClick={() => updateTrendCase({ variable: v.code })}
+                >
+                  {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
+                  {v.label}
+                </button>
+              )
+            })}
           </div>
           <p className="text-sm leading-normal text-muted">
             <span className="text-text">{meta.label}:</span> {meta.definition}
@@ -359,7 +546,29 @@ export default function TrendCaseFile() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-semibold text-text">3. Where in {REGION_NAME}?</p>
+          <p className="text-sm font-semibold text-text">3. Which part of the year?</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Part of the year">
+            {SEASON_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                aria-pressed={season === o.id}
+                className={cn(BTN, season === o.id ? BTN_ACTIVE : BTN_IDLE)}
+                onClick={() => updateTrendCase({ season: o.id })}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm leading-normal text-muted">
+            {season === 'all'
+              ? 'Every month is tested, with the normal seasonal ups and downs removed first.'
+              : `Only ${seasonById(season).span} is tested: one average per year. A place can trend one way in one season and the opposite way in another.`}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-text">4. Where in {REGION_NAME}?</p>
           {outsideClick ? (
             <p className="rounded-lg border border-amber-300/40 bg-amber-400/10 px-3! py-2! text-sm leading-normal text-amber-100" role="status">
               {formatCoords(outsideClick.lat, outsideClick.lng)} is outside the study region. {OUTSIDE_REGION_MESSAGE}
@@ -392,6 +601,7 @@ export default function TrendCaseFile() {
               openTrendCase({
                 places: [{ lat: tip.lat, lng: tip.lng, label: tip.label }],
                 variable: tip.variable,
+                season: 'all',
                 theme: POWER_VARIABLES[tip.variable].theme,
               })
               flyToLocation({ lat: tip.lat, lng: tip.lng })
@@ -409,8 +619,11 @@ export default function TrendCaseFile() {
             key={`${place.lat},${place.lng},${i}`}
             place={place}
             variable={meta.code}
+            season={season}
             color={PLACE_COLORS[i]}
             compact={comparing}
+            showNotes={i === places.length - 1}
+            onPickSeason={(id) => updateTrendCase({ season: id })}
             onRemove={
               comparing
                 ? () => updateTrendCase({ places: places.filter((_, j) => j !== i), pickingCompare: false })
@@ -435,7 +648,7 @@ export default function TrendCaseFile() {
         </div>
 
         <p className="text-sm leading-normal text-muted">
-          {POWER_CREDIT} Values are model-based estimates for the whole grid cell outlined on the map (about 55 × 47 km; sunlight uses larger 1° cells), not a single weather station.
+          {POWER_CREDIT} Values are satellite- and model-based estimates for the whole grid cell outlined on the map (about 55 × 47 km; sunlight and haze use much larger cells), not a single weather station.
         </p>
       </div>
     </aside>

@@ -11,9 +11,21 @@ const SEATTLE = { lat: 47.61, lng: -122.33, label: 'Seattle, Washington' }
 const YAKIMA = { lat: 46.6, lng: -120.51, label: 'Yakima, Washington' }
 const WENATCHEE = { lat: 47.42, lng: -120.31, label: 'Wenatchee, Washington' }
 const MOUNT_VERNON = { lat: 48.42, lng: -122.33, label: 'Skagit Valley, Washington' }
+const METHOW = { lat: 48.48, lng: -120.19, label: 'Methow Valley, Washington' }
 
-/** @type {{ id: string, title: string, blurb: string, variable: string, places: DemoPlace[] }[]} */
+/**
+ * `season` is optional: 'winter' | 'spring' | 'summer' | 'fall' opens the case
+ * on that season's test; without it the case opens on the whole year.
+ * @type {{ id: string, title: string, blurb: string, variable: string, season?: string, places: DemoPlace[] }[]}
+ */
 export const TREND_DEMOS = [
+  {
+    id: 'seattle-haze',
+    title: 'Seattle haze: two seasons, two answers',
+    blurb: 'Is the air getting hazier or clearer? Spring says clearer. Summer says hazier.',
+    variable: 'AOD_55',
+    places: [SEATTLE],
+  },
   {
     id: 'snoqualmie-snow',
     title: 'Snoqualmie Pass snow',
@@ -46,10 +58,11 @@ export const TIP_PLACES = {
   flood: MOUNT_VERNON,
   heat: WENATCHEE,
   snow: SNOQUALMIE,
+  smoke: METHOW,
 }
 
 /** Variables cached for every saved place, so the picker keeps working offline. */
-export const DEMO_CACHED_VARIABLES = ['T2M', 'T2M_MAX', 'PRECTOTCORR', 'GWETROOT', 'RH2M', 'SNODP', 'ALLSKY_SFC_SW_DWN']
+export const DEMO_CACHED_VARIABLES = ['T2M', 'T2M_MAX', 'PRECTOTCORR', 'GWETROOT', 'RH2M', 'SNODP', 'ALLSKY_SFC_SW_DWN', 'AOD_55']
 
 /** Every distinct saved place. */
 export function demoPlaces() {

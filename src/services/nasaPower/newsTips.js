@@ -55,6 +55,12 @@ export const NEWS_THEMES = [
       '降雪|暴雪|积雪|積雪|폭설|大雪',
     ),
   },
+  {
+    id: 'smoke',
+    label: 'smoke and air quality',
+    variables: ['AOD_55'],
+    pattern: terms('wildfire smoke|smoke|smoky|haze|hazy|smog|air quality|wildfires?|humo|fumaça|fumée|rauch', '雾霾|霧霾|烟雾|煙霧|미세먼지|煙霧'),
+  },
 ]
 
 const isGdelt = (evt) => String(evt?.source || '').toLowerCase().includes('gdelt')
@@ -100,7 +106,7 @@ export function indexNewsThemes(events) {
 export function newsTipQuery(countryName) {
   const name = String(countryName || '').replace(/["()]/g, '').trim()
   if (!name) return null
-  return `"${name}" (flood OR flooding OR drought OR "water shortage" OR "heat wave" OR heatwave OR snowfall OR snowpack)`
+  return `"${name}" (flood OR flooding OR drought OR "water shortage" OR "heat wave" OR heatwave OR snowfall OR snowpack OR wildfire OR "air quality")`
 }
 
 /**
