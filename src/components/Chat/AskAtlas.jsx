@@ -300,9 +300,6 @@ function Panel() {
             </button>
           )}
         </div>
-        <p className="text-sm leading-normal text-muted">
-          {caseOpen ? 'Gemini can be wrong. Check the numbers in the case file.' : 'Gemini can be wrong. Check answers against the data.'}
-        </p>
       </form>
     </aside>
   )
