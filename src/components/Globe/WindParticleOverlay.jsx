@@ -29,9 +29,11 @@ const RAD = Math.PI / 180
  * @param {object} p
  * @param {{ lat: number, lng: number }} centre — degrees
  * @param {number} radius — cap radius in radians
+ * @param {number} [inner=0] — when set, spawn only in the ring between `inner` and `radius`
  */
-function spawn(p, centre, radius) {
-  const dist = Math.acos(1 - Math.random() * (1 - Math.cos(radius)))
+function spawn(p, centre, radius, inner = 0) {
+  const cosInner = Math.cos(inner)
+  const dist = Math.acos(cosInner - Math.random() * (cosInner - Math.cos(radius)))
   const bearing = Math.random() * 2 * Math.PI
   const lat0 = centre.lat * RAD
   const sinLat = Math.sin(lat0) * Math.cos(dist) + Math.cos(lat0) * Math.sin(dist) * Math.cos(bearing)
@@ -90,6 +92,8 @@ export default function WindParticleOverlay({ enabled = false, getFrame }) {
 
     /** @type {{ lat: number, lng: number, age: number, life: number }[]} */
     const particles = []
+    /** Radius (radians) of the visible cap the particles are currently spread over. */
+    let spawnReach = 0
 
     let width = 0
     let height = 0
@@ -132,7 +136,19 @@ export default function WindParticleOverlay({ enabled = false, getFrame }) {
           p.age = Math.random() * p.life
           particles.push(p)
         }
+      } else if (reach > spawnReach) {
+        // Zooming out: particles spread over the old, smaller cap are all still in view, so
+        // nothing would respawn and they'd stay bunched in a circle. Move the share that
+        // belongs in the newly visible ring out there, keeping the density even.
+        const outer = Math.min(Math.PI, reach)
+        const inner = Math.min(outer, spawnReach)
+        const keep = (1 - Math.cos(inner)) / (1 - Math.cos(outer))
+        for (const p of particles) {
+          if (Math.random() >= keep) spawn(p, focus, outer, inner)
+        }
       }
+      // Zooming in needs no help: particles outside the smaller cap respawn inside it below.
+      spawnReach = reach
 
       for (const p of particles) {
         const { u, v } = sample(p.lat, p.lng)
