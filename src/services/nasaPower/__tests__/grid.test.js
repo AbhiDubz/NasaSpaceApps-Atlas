@@ -48,6 +48,13 @@ describe('NASA POWER grid cell', () => {
     expect(gridCell(48.01, -121.5, 'AOD_55').south).toBe(48)
   })
 
+  it('uses the prebuilt grid cells for instrument variables', () => {
+    expect(gridCell(47.61, -122.33, 'NDVI')).toMatchObject({ south: 47.6, north: 47.7, west: -122.4, east: -122.3, source: 'MODIS' })
+    expect(gridCell(47.61, -122.33, 'NO2')).toMatchObject({ south: 47.5, north: 47.75, west: -122.5, east: -122.25, source: 'OMI' })
+    expect(gridCell(47.61, -122.33, 'CO_500')).toMatchObject({ south: 47, north: 48, west: -123, east: -122, source: 'AIRS' })
+    expect(gridCell(47.61, -122.33, 'NDVI').kmNS).toBe(11)
+  })
+
   it('builds a closed, densified ring', () => {
     const ring = gridCellRing(gridCell(47.61, -122.33, 'T2M'))
     expect(ring[0]).toEqual(ring[ring.length - 1])

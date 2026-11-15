@@ -31,7 +31,7 @@ export const NEWS_THEMES = [
   {
     id: 'flood',
     label: 'flooding',
-    variables: ['PRECTOTCORR'],
+    variables: ['PRECTOTCORR', 'RUNOFF'],
     pattern: terms(
       'flood(?:s|ed|ing)?|flash floods?|inundaci[oó]n(?:es)?|inunda[cç][aã]o|inunda[cç][oõ]es|enchentes?|alagamentos?|inondations?|crues?|hochwasser|überschwemmung(?:en)?|alluvion[ei]|banjir|sel felaket\\p{L}*|наводнени[еяй]|паводк[аиов]*',
       '洪水|洪灾|洪災|水灾|水災|防洪|홍수|洪水被害',

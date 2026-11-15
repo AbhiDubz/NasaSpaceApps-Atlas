@@ -34,6 +34,7 @@ import { TREND_DEMOS, demoPlaceLabel } from '../../services/nasaPower/demos.js'
 import { fmtP, SEASONS, seasonById } from '../../services/nasaPower/trendStats.js'
 import { OUTSIDE_REGION_MESSAGE, REGION_BBOX, REGION_NAME } from '../../services/nasaPower/region.js'
 import { gridCell } from '../../services/nasaPower/grid.js'
+import { gridCredit, INSTRUMENT_GRIDS } from '../../services/nasaPower/instrumentGrids.js'
 import { TREND_PLACE_COLORS } from '../../hooks/useTrendOverlays'
 import { PlaceNewsTips, RegionNewsTips } from './NewsTips'
 import PlaceScan from './PlaceScan'
@@ -477,7 +478,8 @@ export default function TrendCaseFile() {
       return
     }
     const p = demo.places[0]
-    const half = 1.5
+    // Frame about three grid cells either side: small satellite cells get a closer view.
+    const half = Math.min(1.5, Math.max(0.4, gridCell(p.lat, p.lng, demo.variable).dLat * 3))
     flyToLocation({
       lat: p.lat,
       lng: p.lng,
@@ -660,9 +662,18 @@ export default function TrendCaseFile() {
           ))}
         </div>
 
-        <p className="text-sm leading-normal text-muted">
-          {POWER_CREDIT} Values are satellite- and model-based estimates for the whole grid cell outlined on the map (about 55 × 47 km; sunlight and haze use much larger cells), not a single weather station.
-        </p>
+        {INSTRUMENT_GRIDS[meta.code] ? (
+          <p className="text-sm leading-normal text-muted">
+            {gridCredit(meta.code)} {meta.label} comes from {INSTRUMENT_GRIDS[meta.code].instrument}.{' '}
+            {INSTRUMENT_GRIDS[meta.code].via === 'gibs'
+              ? `Values are read back from NASA's color-coded maps, so each reading is rounded to about ${INSTRUMENT_GRIDS[meta.code].step}, then averaged over the grid cell outlined on the map.`
+              : 'Values are the product’s own numbers for the grid cell outlined on the map.'}
+          </p>
+        ) : (
+          <p className="text-sm leading-normal text-muted">
+            {POWER_CREDIT} Values are satellite- and model-based estimates for the whole grid cell outlined on the map (about 55 × 47 km; sunlight and haze use much larger cells), not a single weather station.
+          </p>
+        )}
       </div>
     </aside>
   )

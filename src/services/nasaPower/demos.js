@@ -11,6 +11,7 @@ const SEATTLE = { lat: 47.61, lng: -122.33, label: 'Seattle, Washington' }
 const YAKIMA = { lat: 46.6, lng: -120.51, label: 'Yakima, Washington' }
 const WENATCHEE = { lat: 47.42, lng: -120.31, label: 'Wenatchee, Washington' }
 const MOUNT_VERNON = { lat: 48.42, lng: -122.33, label: 'Skagit Valley, Washington' }
+const ST_HELENS = { lat: 46.25, lng: -122.17, label: 'Mount St. Helens blast zone, Washington' }
 const METHOW = { lat: 48.48, lng: -120.19, label: 'Methow Valley, Washington' }
 
 /**
@@ -24,6 +25,20 @@ export const TREND_DEMOS = [
     title: 'Seattle haze: two seasons, two answers',
     blurb: 'Is the air getting hazier or clearer? Spring says clearer. Summer says hazier.',
     variable: 'AOD_55',
+    places: [SEATTLE],
+  },
+  {
+    id: 'st-helens-regrowth',
+    title: 'Mount St. Helens: the blast zone turns green',
+    blurb: 'The 1980 eruption left bare ash and rock. Is life coming back?',
+    variable: 'NDVI',
+    places: [ST_HELENS],
+  },
+  {
+    id: 'seattle-no2',
+    title: 'Seattle exhaust pollution',
+    blurb: 'Has the air over the city been getting cleaner since 2004?',
+    variable: 'NO2',
     places: [SEATTLE],
   },
   {
@@ -62,7 +77,7 @@ export const TIP_PLACES = {
 }
 
 /** Variables cached for every saved place, so the picker keeps working offline. */
-export const DEMO_CACHED_VARIABLES = ['T2M', 'T2M_MAX', 'PRECTOTCORR', 'GWETROOT', 'RH2M', 'SNODP', 'ALLSKY_SFC_SW_DWN', 'AOD_55']
+export const DEMO_CACHED_VARIABLES = ['T2M', 'T2M_MAX', 'PRECTOTCORR', 'GWETROOT', 'RH2M', 'SNODP', 'ALLSKY_SFC_SW_DWN', 'AOD_55', 'EVLAND']
 
 /** Every distinct saved place. */
 export function demoPlaces() {

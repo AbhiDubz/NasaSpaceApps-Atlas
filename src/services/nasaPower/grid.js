@@ -13,7 +13,11 @@
  *     beyond it (all of Washington). Seattle → 47–48°N, 124–122°W.
  *   CERES SYN1deg aerosols (haze): 2° × 2°, edges on even degrees.
  *     Seattle → 46–48°N, 124–122°W. Checked across Washington only.
+ *
+ * Instrument variables (MODIS, AIRS, OMI, GPM, GLDAS) come from the prebuilt
+ * grids in instrumentGrids.js: square cells with edges on multiples of the cell size.
  */
+import { INSTRUMENT_GRIDS } from './instrumentGrids.js'
 
 const KM_PER_DEG_LAT = 111.32
 
@@ -24,10 +28,24 @@ const GRIDS = {
   ceresAerosol: { source: 'CERES SYN1deg aerosol', dLat: 2, dLng: 2, centered: false },
 }
 
+/** Short source names for the "data covers" line. */
+const GRID_SOURCE = {
+  NDVI: 'MODIS',
+  LST_DAY: 'MODIS',
+  CO_500: 'AIRS',
+  SOIL_GLDAS: 'GLDAS',
+  RUNOFF: 'GLDAS',
+  PRECIP_GPM: 'GPM IMERG',
+  NO2: 'OMI',
+  WET_DAYS: 'GPM IMERG',
+}
+
 /** Which grid a variable is served on. */
 export function gridFor(variable) {
   if (variable === 'ALLSKY_SFC_SW_DWN') return GRIDS.ceres
   if (variable === 'AOD_55') return GRIDS.ceresAerosol
+  const spec = INSTRUMENT_GRIDS[variable]
+  if (spec) return { source: GRID_SOURCE[variable] || 'NASA', dLat: spec.cell, dLng: spec.cell, centered: false }
   return GRIDS.merra2
 }
 

@@ -4,11 +4,13 @@
  * Tests every variable at the chosen place and lists them with the ones
  * that are changing first, so the user does not have to guess which
  * variable to look at. Picking a row opens that variable's full case.
+ * Once everything has loaded, the variables with no clear trend fold away
+ * behind a button so the list stays short.
  *
  * Note: index.css has an unlayered `* { margin: 0; padding: 0 }` reset that
  * outranks Tailwind's layered utilities, so spacing classes here carry `!`.
  */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import { useTrendScan } from '../../hooks/useNasaPower'
 import { POWER_VARIABLES } from '../../services/nasaPower/variables.js'
@@ -94,6 +96,13 @@ export default function PlaceScan({ place, variable, season, onPickVariable }) {
   const results = useTrendScan({ lat: place.lat, lng: place.lng })
   const scan = useMemo(() => summarizeScan(results, season), [results, season])
   const chosen = seasonById(season)
+  const [showAll, setShowAll] = useState(false)
+
+  // Changing (or hiding a seasonal flip) stays in view, as does whatever is open below.
+  const notable = (row) => row.significant || Boolean(row.opposite) || row.code === variable
+  const quiet = scan.complete ? scan.rows.filter((row) => !notable(row)) : []
+  const fold = quiet.length > 1 && quiet.length < scan.rows.length && !showAll
+  const rows = fold ? scan.rows.filter(notable) : scan.rows
 
   return (
     <section className="flex flex-col gap-2" aria-label="What is changing here">
@@ -102,10 +111,20 @@ export default function PlaceScan({ place, variable, season, onPickVariable }) {
         {headline(scan, chosen?.label.toLowerCase())}
       </p>
       <ul className="flex flex-col gap-1.5">
-        {scan.rows.map((row) => (
+        {rows.map((row) => (
           <Row key={row.code} row={row} active={variable === row.code} onPick={onPickVariable} />
         ))}
       </ul>
+      {quiet.length > 1 && quiet.length < scan.rows.length ? (
+        <button
+          type="button"
+          aria-expanded={!fold}
+          className={cn(ROW, ROW_IDLE, 'justify-center text-muted hover:text-text')}
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {fold ? `Show the ${quiet.length} with no clear trend` : 'Hide the ones with no clear trend'}
+        </button>
+      ) : null}
       <p className="text-sm leading-normal text-muted">
         Change per decade{chosen ? ` (${chosen.span} only)` : ''}, most certain first. Pick one to open its full case below.
       </p>

@@ -6,7 +6,9 @@
  *   useTrendScan({ lat, lng })        → the trend test for every variable at a point
  *
  * The first two return `{ data, loading, error }`. Saved demo places load from static
- * JSON in /trend-demos first, so they work without the live API.
+ * JSON in /trend-demos first, so they work without the live API. Instrument
+ * variables (MODIS, AIRS, OMI, GPM, GLDAS) never touch the API: their grids
+ * are static files, and the trend test runs in the browser.
  *
  * A season test is worked out in the browser from the whole-year record that
  * is already loaded (same statistics module as the API), so switching
@@ -15,7 +17,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { demoCacheUrl, isCachedDemo } from '../services/nasaPower/demos.js'
 import { analyzeTrend, seasonById } from '../services/nasaPower/trendStats.js'
-import { POWER_VARIABLE_CODES } from '../services/nasaPower/variables.js'
+import { isGridVariable, POWER_VARIABLE_CODES } from '../services/nasaPower/variables.js'
+import { gridChunkUrl } from '../services/nasaPower/instrumentGrids.js'
+import { gridChunkFor, gridTrend, NO_GRID_DATA_MESSAGE } from '../services/nasaPower/instrumentTrend.js'
 
 /** @type {Map<string, Promise<object>>} */
 const memo = new Map()
@@ -70,8 +74,30 @@ export function useNasaPower({ lat, lng, vars } = {}) {
 
 const trendUrl = (lat, lng, variable) => `/api/trend?lat=${lat}&lng=${lng}&var=${variable}`
 
-/** Whole-year trend result for one variable: the saved copy when there is one, else the live API. */
+/** Trend results worked out in the browser from the static instrument grids. */
+const gridMemo = new Map()
+
+function loadGridTrend(lat, lng, variable) {
+  const key = `${variable}:${lat},${lng}`
+  let p = gridMemo.get(key)
+  if (!p) {
+    const chunk = gridChunkFor(variable, lat, lng)
+    p =
+      chunk == null
+        ? Promise.reject(new Error(NO_GRID_DATA_MESSAGE))
+        : cachedJson(gridChunkUrl(variable, chunk)).then((file) => gridTrend(file, { code: variable, lat, lng }))
+    gridMemo.set(key, p)
+    p.catch(() => gridMemo.delete(key))
+  }
+  return p
+}
+
+/**
+ * Whole-year trend result for one variable: the static grid for instrument
+ * variables, else the saved copy when there is one, else the live API.
+ */
 function loadTrend(lat, lng, variable) {
+  if (isGridVariable(variable)) return loadGridTrend(lat, lng, variable)
   const live = () => cachedJson(trendUrl(lat, lng, variable))
   if (!isCachedDemo(lat, lng, variable)) return live()
   return cachedJson(demoCacheUrl(lat, lng, variable)).catch(live)
