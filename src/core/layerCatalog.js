@@ -241,9 +241,15 @@ export const HIDDEN_SOURCE_IDS = new Set(SHOW_ALL_LAYERS ? [] : ['coingecko', 'a
  * so the globe stays clean and clicks go to Trend Detective. Unlike the hidden
  * layers above, they stay in Settings and can be switched back on.
  */
+/**
+ * Added in the second pass: the news-tone country tint paints every country at
+ * ~50% opacity, which washes out the satellite imagery underneath.
+ */
+export const SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS = ['gdeltChoropleth']
+
 export const SUBMISSION_DEFAULT_OFF_LAYER_KEYS = SHOW_ALL_LAYERS
   ? []
-  : ['firms', 'usgs', 'gdacs', 'eonet', 'nhcStorms']
+  : ['firms', 'usgs', 'gdacs', 'eonet', 'nhcStorms', ...SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS]
 
 export function isLayerHidden(layerKey) {
   return HIDDEN_LAYER_KEYS.has(layerKey)

@@ -12,7 +12,7 @@ import {
   subscribeToGdeltAggregates,
   destroyEventBus,
 } from '../core/eventBus'
-import { isLayerToggleOn, SUBMISSION_DEFAULT_OFF_LAYER_KEYS } from '../core/layerCatalog'
+import { isLayerToggleOn, SUBMISSION_DEFAULT_OFF_LAYER_KEYS, SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS } from '../core/layerCatalog'
 import { supabase } from '../services/supabase'
 import { resolveFocusBboxForIsoCodes } from '../core/workspaceMatch'
 import {
@@ -89,16 +89,22 @@ const GIBS_IMAGERY_EXCLUSIVE_KEYS = ['gibsTrueColor', 'gibsFires', 'gibsAerosol'
 
 for (const key of SUBMISSION_DEFAULT_OFF_LAYER_KEYS) DEFAULT_DATA_LAYERS[key] = false
 
-/** One-time switch-off of disaster pins for browsers that saved layer settings before it. */
+/**
+ * One-time switch-off of the submission's default-off layers for browsers that
+ * saved layer settings before it. Browsers already on v1 only get the layers
+ * added since, so anything the user switched back on stays on.
+ */
 const SUBMISSION_LAYERS_MIGRATION_KEY = 'atlas_trend_detective_layers'
 function applySubmissionLayerDefaults(layers) {
   if (!SUBMISSION_DEFAULT_OFF_LAYER_KEYS.length) return layers
   try {
-    if (localStorage.getItem(SUBMISSION_LAYERS_MIGRATION_KEY) === 'v1') return layers
+    const applied = localStorage.getItem(SUBMISSION_LAYERS_MIGRATION_KEY)
+    if (applied === 'v2') return layers
+    const keys = applied === 'v1' ? SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS : SUBMISSION_DEFAULT_OFF_LAYER_KEYS
     const next = { ...layers }
-    for (const key of SUBMISSION_DEFAULT_OFF_LAYER_KEYS) next[key] = false
+    for (const key of keys) next[key] = false
     localStorage.setItem(STORAGE_KEY_DATA_LAYERS, JSON.stringify(next))
-    localStorage.setItem(SUBMISSION_LAYERS_MIGRATION_KEY, 'v1')
+    localStorage.setItem(SUBMISSION_LAYERS_MIGRATION_KEY, 'v2')
     return next
   } catch {
     return layers
