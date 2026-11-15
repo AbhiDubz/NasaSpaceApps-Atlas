@@ -18,7 +18,12 @@ export {
   isTrackArchetype,
 } from './viewModels'
 export { buildClusterViewModels, convexHull, MAX_CLUSTER_INPUTS } from './clusters'
-export { buildChoroplethViewModels, geoJsonToOuterRings, CHOROPLETH_STROKE } from './choropleth'
+export {
+  buildChoroplethViewModels,
+  choroplethFillFade,
+  geoJsonToOuterRings,
+  CHOROPLETH_STROKE,
+} from './choropleth'
 export { buildHeatBins } from './heatBins'
 export {
   applyBackgroundClick,

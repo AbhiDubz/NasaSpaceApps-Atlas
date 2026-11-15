@@ -41,7 +41,9 @@ import {
   approxLatLngUnderPointer,
   resolveFlyToTarget,
   geoJsonToOuterRings,
+  choroplethFillFade,
 } from '../../globe-core'
+import { choroplethColorToRgba } from '../../services/gdelt/geoService'
 import { buildGdeltDocQuery } from '../../services/gdelt/analyticsService'
 import useShareCameraBridge from '../../hooks/useShareCameraBridge'
 import { PLACE_SEARCH_PIN_SRC } from '../../constants/placeSearchPin'
@@ -843,7 +845,9 @@ function InnerMap({ onGlobeReady }) {
   }, [searchHighlight])
 
   /** Choropleth VMs flattened to Map3D outer rings (capped for marker budget). */
+  const choroFillFade = Math.round(choroplethFillFade(cameraRangeM) * 10) / 10
   const choroPolygons = useMemo(() => {
+    const fillFade = choroFillFade
     const list = []
     for (const c of choropleth) {
       const rings = geoJsonToOuterRings(c.geometry)
@@ -851,13 +855,13 @@ function InnerMap({ onGlobeReady }) {
         list.push({
           key: `${c.key}-${j}`,
           ring: rings[j],
-          fill: c.fill,
+          fill: choroplethColorToRgba(c.fillColor, fillFade),
           stroke: c.stroke,
         })
       }
     }
     return list.slice(0, 220)
-  }, [choropleth])
+  }, [choropleth, choroFillFade])
 
   return (
     <div
