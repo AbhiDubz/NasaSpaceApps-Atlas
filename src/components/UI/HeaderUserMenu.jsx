@@ -128,7 +128,7 @@ export default function HeaderUserMenu() {
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative' }} data-tour="account">
       <AnimatePresence>
         {authOpen && (
           <motion.div

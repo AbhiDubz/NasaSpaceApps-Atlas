@@ -135,6 +135,7 @@ export function AskAtlasLauncher() {
     <button
       type="button"
       onClick={openAskAtlas}
+      data-tour="ask-atlas"
       className={cn(BTN, PANEL_BG, 'border-line-strong px-5! py-2.5! text-base text-text shadow-xl hover:border-accent-border')}
     >
       <Sparkles className="h-5 w-5 text-accent" aria-hidden="true" />

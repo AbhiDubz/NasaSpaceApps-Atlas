@@ -305,7 +305,7 @@ export default function HeaderSearchBar() {
   const placeholder = 'Search an address or place…'
 
   return (
-    <div ref={wrapRef} className={`hud-search ${open ? 'is-open' : ''}`}>
+    <div ref={wrapRef} className={`hud-search ${open ? 'is-open' : ''}`} data-tour="search">
       <AnimatePresence initial={false} mode="wait">
         {!open ? (
           <motion.button

@@ -353,6 +353,14 @@ export const useAtlasStore = create((set, get) => ({
 
   // ── Auth / User ──
   user: null,
+  /** True once the initial Supabase session check has resolved (or there is no Supabase). */
+  authReady: false,
+
+  // ── Guided tour ──
+  /** In-app walkthrough overlay (see components/Tour/AppTour). */
+  tourOpen: false,
+  /** 'prompt' (ask first) | 'tour' (jump straight into step 1) */
+  tourMode: 'prompt',
 
   // ── Investigation Workstation ──
   /** 'dashboard' | 'workstation' — auth users land on dashboard */
@@ -1094,7 +1102,12 @@ export const useAtlasStore = create((set, get) => ({
     set({ detectionLabelDensity: mode })
   },
 
+  // ── Guided tour ──
+  openTour: (mode = 'tour') => set({ tourOpen: true, tourMode: mode === 'prompt' ? 'prompt' : 'tour' }),
+  closeTour: () => set({ tourOpen: false }),
+
   // ── Auth Actions ──
+  setAuthReady: () => set({ authReady: true }),
   setUser: (user) => {
     if (!user) {
       set({ user: null })

@@ -128,6 +128,9 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* Full-screen app shell: the document itself never scrolls or rubber-bands
+     (stops iOS from panning the whole page sideways). Inner panels scroll. */
+  overscroll-behavior: none;
   font-family: var(--font-ui);
   background: var(--bg);
   color: var(--text);
@@ -4264,6 +4267,13 @@ button.atlas-logo-header-btn:focus-visible {
      - no text selection or long-press callout on marketing chrome
      - no native drag ghosts of links / images following the pointer */
   overscroll-behavior: none;
+  /* Mobile: the landing only ever scrolls vertically. `overflow-x: hidden` alone still
+     lets iOS/Android pan sideways a few px when any child (blurred glow, wide headline,
+     elevated globe host) pokes past the viewport — clip it and refuse horizontal pans.
+     The globe layer sets its own `touch-action: none` and handles orbit in JS. */
+  overflow-x: clip;
+  touch-action: pan-y pinch-zoom;
+  max-width: 100vw;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -4304,6 +4314,7 @@ button.atlas-logo-header-btn:focus-visible {
   margin-inline: auto;
   padding-inline: var(--stitch-pad-x);
   padding-bottom: clamp(3rem, 8vh, 5rem);
+  overflow-x: clip;
 }
 
 /* Full-viewport globe.gl + night sky; main uses hit targets so drags pass through to the canvas */
@@ -4314,6 +4325,7 @@ button.atlas-logo-header-btn:focus-visible {
   width: 100%;
   height: 100%;
   min-height: 100dvh;
+  overflow: hidden;
 }
 
 .landing-main-over-globe {
@@ -4882,7 +4894,7 @@ button.atlas-logo-header-btn:focus-visible {
   z-index: -1;
   left: 50%;
   translate: -50% 0;
-  width: min(100vw + 4rem, var(--scrim-w, 60rem));
+  width: min(100vw, var(--scrim-w, 60rem));
   top: var(--scrim-top, -5rem);
   bottom: var(--scrim-bottom, -5rem);
   pointer-events: none;
@@ -7055,3 +7067,195 @@ button.atlas-logo-header-btn:focus-visible {
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.82);
 }
+
+/* ── Guided tour (components/Tour/AppTour) ── */
+.atlas-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: auto;
+}
+
+.atlas-tour__shield {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+}
+
+.atlas-tour__shield--dim {
+  background: rgba(2, 6, 14, 0.56);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.atlas-tour__spotlight {
+  position: fixed;
+  border-radius: 8px;
+  border: 1.5px solid rgba(0, 207, 255, 0.78);
+  box-shadow:
+    0 0 0 9999px rgba(2, 6, 14, 0.62),
+    0 0 24px rgba(0, 207, 255, 0.32);
+  pointer-events: none;
+  transition:
+    top 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    left 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.atlas-tour__card {
+  position: fixed;
+  width: min(340px, calc(100vw - 24px));
+  padding: 18px 20px 16px;
+  border-radius: 10px;
+  background: rgba(6, 10, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(0, 207, 255, 0.12);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  color: #f1f5f9;
+  font-family: var(--font-ui);
+  transition:
+    top 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    left 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.atlas-tour__card--prompt {
+  width: min(360px, calc(100vw - 24px));
+}
+
+.atlas-tour__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.atlas-tour__kicker {
+  margin: 0 0 6px;
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent, #00cfff);
+}
+
+.atlas-tour__head .atlas-tour__kicker {
+  margin-bottom: 0;
+}
+
+.atlas-tour__skip {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.85);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.atlas-tour__skip:hover {
+  color: #f8fafc;
+}
+
+.atlas-tour__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: #f8fafc;
+}
+
+.atlas-tour__body {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.atlas-tour__progress {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.atlas-tour__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+.atlas-tour__dot.is-done {
+  background: rgba(0, 207, 255, 0.45);
+}
+
+.atlas-tour__dot.is-active {
+  width: 18px;
+  background: var(--accent, #00cfff);
+}
+
+.atlas-tour__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.atlas-tour__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.atlas-tour__btn--ghost {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.atlas-tour__btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.atlas-tour__btn--primary {
+  background: rgba(0, 207, 255, 0.16);
+  border: 1px solid rgba(0, 207, 255, 0.55);
+  color: #e0f7ff;
+}
+
+.atlas-tour__btn--primary:hover {
+  background: rgba(0, 207, 255, 0.26);
+  border-color: rgba(0, 207, 255, 0.8);
+  color: #fff;
+}
+
+.atlas-tour__btn:focus-visible,
+.atlas-tour__skip:focus-visible {
+  outline: 2px solid var(--accent, #00cfff);
+  outline-offset: 2px;
+}
+

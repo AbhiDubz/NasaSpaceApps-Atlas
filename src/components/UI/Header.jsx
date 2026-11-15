@@ -86,6 +86,7 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
   const [searchOpen, setSearchOpen] = useState(false)
   const pushToast = useAtlasStore((s) => s.pushToast)
   const openReportExport = useAtlasStore((s) => s.openReportExport)
+  const openTour = useAtlasStore((s) => s.openTour)
   const unseenTriage = useAtlasStore((s) =>
     countUnseenHighSeverity(s.events, s.triageLastSeenAt, undefined, s.investigation))
 
@@ -232,6 +233,7 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
               <button
                 onClick={() => toggleWorkbench('triage')}
                 className={`hud-icon-btn hud-icon-btn-badged ${workbench === 'triage' ? 'active' : ''}`}
+                data-tour="triage"
                 title="Triage — what changed since you looked"
               >
                 <Inbox size={ICON_SIZE} />
@@ -243,6 +245,7 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
               <button
                 type="button"
                 onClick={() => toggleWorkbench('analytics')}
+                data-tour="analytics"
                 className={`hud-icon-btn ${workbench === 'analytics' ? 'active' : ''}`}
                 title="Analytics"
               >
@@ -251,6 +254,7 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
 
               <button
                 onClick={() => toggleWorkbench('layers')}
+                data-tour="layers"
                 className={`hud-icon-btn ${workbench === 'layers' ? 'active' : ''}`}
                 title="Globe layers"
               >
@@ -259,6 +263,7 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
 
               <button
                 onClick={() => toggleWorkbench('settings')}
+                data-tour="settings"
                 className={`hud-icon-btn ${workbench === 'settings' ? 'active' : ''}`}
                 title="Settings"
               >
@@ -270,6 +275,7 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
                   type="button"
                   className={`hud-icon-btn ${streetViewMode ? 'active' : ''}`}
                   onClick={toggleStreetViewMode}
+                  data-tour="streetview"
                   title={streetViewMode
                     ? 'Street View mode on — click globe for panorama (click to disable)'
                     : 'Enable Street View mode — then click the globe to open a panorama'}
@@ -318,6 +324,7 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
           <div style={{ position: 'relative' }} ref={moreRef}>
             <button
               onClick={() => setMoreOpen(v => !v)}
+              data-tour="more"
               className={`hud-icon-btn ${moreOpen ? 'active' : ''}`}
               title="More actions"
             >
@@ -446,6 +453,14 @@ export default function Header({ hudHidden = false, onToggleHud, inWorkspace = f
                     <Search size={ICON_SIZE} />
                     <span>News Sources</span>
                     <span className="hud-dropdown-badge">{selectedSources.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="hud-dropdown-item"
+                    onClick={() => { openTour(); setMoreOpen(false) }}
+                  >
+                    <Compass size={ICON_SIZE} />
+                    <span>Quick Tour</span>
                   </button>
                 </motion.div>
               )}

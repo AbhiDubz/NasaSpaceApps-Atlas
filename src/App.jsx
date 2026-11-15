@@ -29,6 +29,8 @@ import WorkspaceDashboard from './components/Workspace/WorkspaceDashboard'
 import WorkspaceTimeline from './components/Workspace/WorkspaceTimeline'
 import TrendCaseFile, { TrendLauncher } from './components/Trend/TrendCaseFile'
 import AskAtlasPanel, { AskAtlasLauncher } from './components/Chat/AskAtlas'
+import AppTour from './components/Tour/AppTour'
+import { syncTourDecisionToAccount } from './core/tourState'
 
 const GoogleGlobe = lazy(() => import('./components/Globe/GoogleGlobe'))
 const GlobeGLView = lazy(() => import('./components/Globe/GlobeGLView'))
@@ -160,16 +162,22 @@ function AtlasLiveApp() {
   }, [])
 
   useEffect(() => {
-    if (!supabase) return undefined
+    if (!supabase) {
+      useAtlasStore.getState().setAuthReady()
+      return undefined
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const store = useAtlasStore.getState()
         store.setUser(session.user)
+        syncTourDecisionToAccount(session.user)
         if (!store.activeWorkspaceId) store.setAppView('dashboard')
       }
-    })
+    }).finally(() => useAtlasStore.getState().setAuthReady())
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      useAtlasStore.getState().setUser(session?.user ?? null)
+      const nextUser = session?.user ?? null
+      useAtlasStore.getState().setUser(nextUser)
+      if (nextUser) syncTourDecisionToAccount(nextUser)
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -362,6 +370,7 @@ function AtlasLiveApp() {
                 </motion.div>
               )}
             </AnimatePresence>
+            {globeReady && <AppTour hudHidden={hudHidden} onShowHud={() => setHudHidden(false)} />}
           </motion.div>
         )}
       </AnimatePresence>
