@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 @import "./design/print.css";
 
 /*
@@ -4258,6 +4258,30 @@ button.atlas-logo-header-btn:focus-visible {
   --landing-target: 44px;
 
   background-color: var(--landing-bg);
+
+  /* Press-and-hold / drag must orbit the globe, never move the UI layer:
+     - no rubber-band overscroll (iOS + macOS elastic scroll dragged the whole overlay)
+     - no text selection or long-press callout on marketing chrome
+     - no native drag ghosts of links / images following the pointer */
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.landing-page.stitch-landing a,
+.landing-page.stitch-landing img {
+  -webkit-user-drag: none;
+}
+
+/* Dialogs keep normal text editing / selection */
+.landing-page.stitch-landing .atlas-contact,
+.landing-page.stitch-landing input,
+.landing-page.stitch-landing textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 @media (prefers-reduced-motion: no-preference) {

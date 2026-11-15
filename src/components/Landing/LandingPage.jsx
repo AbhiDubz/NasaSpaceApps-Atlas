@@ -115,6 +115,18 @@ export default function LandingPage() {
   )
 
   useEffect(() => {
+    // Block native HTML drag-and-drop on the landing (link/text ghosts that follow the
+    // pointer on press-and-hold). Native listener: framer-motion swallows `onDragStart`.
+    const root = landingScrollRef.current
+    if (!root) return
+    const onDragStart = (e) => {
+      if (!e.target.closest?.('input, textarea')) e.preventDefault()
+    }
+    root.addEventListener('dragstart', onDragStart)
+    return () => root.removeEventListener('dragstart', onDragStart)
+  }, [])
+
+  useEffect(() => {
     const root = landingScrollRef.current
     const sentinel = navTopSentinelRef.current
     if (!root || !sentinel) return
