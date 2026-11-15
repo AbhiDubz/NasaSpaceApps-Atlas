@@ -5,7 +5,7 @@ import { useNewsData } from './hooks/useNewsData'
 import Header from './components/UI/Header'
 import Inspector from './components/Inspector/Inspector'
 import Workbench from './components/Workbench/Workbench'
-import LiveTicker from './components/Feed/LiveTicker'
+import WeatherTicker from './components/Feed/WeatherTicker'
 import HoverLabel from './components/UI/HoverLabel'
 import StreetViewOverlay from './components/UI/StreetViewOverlay'
 import YouTubeEmbedOverlay from './components/UI/YouTubeEmbedOverlay'
@@ -350,7 +350,7 @@ function AtlasLiveApp() {
                   <StreetViewOverlay />
                   <YouTubeEmbedOverlay />
                   <HoverLabel />
-                  <LiveTicker />
+                  <WeatherTicker />
                   {!mobileMode && <GlobeLegend />}
                   <FetchStatusOverlay />
                   <ToastHost />

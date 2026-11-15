@@ -1,6 +1,6 @@
 /**
  * FlatMap — 2D map via MapLibre GL JS.
- * Carto Dark Matter greyscale basemap with subtle admin borders (no graph coloring).
+ * Esri Dark Gray Canvas greyscale basemap with subtle admin borders (no graph coloring).
  */
 import { useEffect, useRef, useMemo, useState } from 'react'
 import useShareCameraBridge from '../../hooks/useShareCameraBridge'
@@ -42,21 +42,23 @@ function buildDetectionLabelFeatures(events, opts) {
 const URL_COUNTRIES =
   'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_countries.geojson'
 
-/** Carto Dark Matter — dark greyscale basemap (no labels; labels layered above admin lines) */
-const BASE_TILES = [
-  'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-  'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-  'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-  'https://d.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-]
+/**
+ * Esri Dark Gray Canvas — dark greyscale basemap, no API key needed.
+ * (CARTO's free Dark Matter tiles now come stamped "API KEY REQUIRED".)
+ * Base has no labels; the reference layer is labels only, layered above admin lines.
+ * Note the ArcGIS tile path order is {z}/{y}/{x}.
+ */
+const ESRI_CANVAS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas'
+const BASE_TILES = [`${ESRI_CANVAS}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`]
 
-/** Carto Dark Matter labels only (countries → cities) */
-const BASE_LABEL_TILES = [
-  'https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-  'https://b.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-  'https://c.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-  'https://d.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png',
-]
+/** Esri Dark Gray Canvas labels only (countries → cities) */
+const BASE_LABEL_TILES = [`${ESRI_CANVAS}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`]
+
+/** Deepest zoom Esri serves for these layers; MapLibre stretches tiles beyond it. */
+const BASE_TILES_MAX_ZOOM = 16
+
+const BASE_ATTRIBUTION =
+  '<a href="https://www.esri.com" target="_blank" rel="noreferrer">Tiles © Esri</a> — Esri, HERE, Garmin, © OpenStreetMap contributors'
 
 /** Match app --bg so the canvas and HUD header read the same as other globe modes */
 const OCEAN_BG = '#030712'
@@ -215,8 +217,8 @@ export default function FlatMap({ onGlobeReady }) {
           type: 'raster',
           tiles: BASE_TILES,
           tileSize: 256,
-          attribution:
-            '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a> © CARTO',
+          maxzoom: BASE_TILES_MAX_ZOOM,
+          attribution: BASE_ATTRIBUTION,
         })
         map.addSource('countries', { type: 'geojson', data: landCountriesFc })
         map.addSource('events', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
@@ -277,8 +279,8 @@ export default function FlatMap({ onGlobeReady }) {
           type: 'raster',
           tiles: BASE_LABEL_TILES,
           tileSize: 256,
-          attribution:
-            '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a> © CARTO',
+          maxzoom: BASE_TILES_MAX_ZOOM,
+          attribution: BASE_ATTRIBUTION,
         })
 
         map.addLayer({

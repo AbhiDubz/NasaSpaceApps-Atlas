@@ -13,6 +13,7 @@ import { newsTipQuery, tipsFromHeadlines } from '../../services/nasaPower/newsTi
 import { TIP_PLACES } from '../../services/nasaPower/demos.js'
 import { REGION_NAME } from '../../services/nasaPower/region.js'
 import { cn } from '../../lib/utils'
+import { variableIcon } from './themeIcons'
 
 const BTN =
   'inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md border px-3! py-1.5! text-sm transition-colors'
@@ -78,17 +79,21 @@ export function PlaceNewsTips({ variable, onPickVariable }) {
             {tip.count} recent headlines about {REGION_NAME} mention {tip.label}. Does the long-term record agree? Try testing:
           </p>
           <div className="flex flex-wrap gap-2">
-            {tip.variables.map((code) => (
-              <button
-                key={code}
-                type="button"
-                aria-pressed={variable === code}
-                className={cn(BTN, variable === code ? BTN_ACTIVE : BTN_IDLE)}
-                onClick={() => onPickVariable(code)}
-              >
-                {POWER_VARIABLES[code].label}
-              </button>
-            ))}
+            {tip.variables.map((code) => {
+              const Icon = variableIcon(code)
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  aria-pressed={variable === code}
+                  className={cn(BTN, variable === code ? BTN_ACTIVE : BTN_IDLE)}
+                  onClick={() => onPickVariable(code)}
+                >
+                  {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
+                  {POWER_VARIABLES[code].label}
+                </button>
+              )
+            })}
           </div>
           {tip.headline ? <p className="text-sm leading-normal text-muted">For example: “{tip.headline}”</p> : null}
         </div>

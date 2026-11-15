@@ -25,15 +25,27 @@ describe('NASA POWER grid cell', () => {
     expect(gridCell(47.76, -122.5, 'T2M').south).toBe(47.75)
   })
 
-  it('uses whole-degree 1° cells for sunlight', () => {
+  it('uses 1° × 2° CERES cells for sunlight at Washington latitudes', () => {
     expect(gridCell(47.61, -122.33, 'ALLSKY_SFC_SW_DWN')).toMatchObject({
       south: 47,
       north: 48,
-      west: -123,
+      west: -124,
       east: -122,
       source: 'CERES SYN1deg',
     })
     expect(gridCell(47.99, -121.99, 'ALLSKY_SFC_SW_DWN').west).toBe(-122)
+    // Below 45° latitude the CERES cells are 1° wide.
+    expect(gridCell(23.8, 90.4, 'ALLSKY_SFC_SW_DWN')).toMatchObject({ west: 90, east: 91 })
+  })
+
+  it('uses 2° × 2° cells for haze', () => {
+    const c = gridCell(47.61, -122.33, 'AOD_55')
+    expect(c).toMatchObject({ south: 46, north: 48, west: -124, east: -122, source: 'CERES SYN1deg aerosol' })
+    expect(c.kmNS).toBe(223)
+    expect(c.kmEW).toBe(152)
+    // Yakima and Snoqualmie Pass share one haze cell.
+    expect(gridCell(46.6, -120.51, 'AOD_55')).toMatchObject(gridCell(47.42, -121.41, 'AOD_55'))
+    expect(gridCell(48.01, -121.5, 'AOD_55').south).toBe(48)
   })
 
   it('builds a closed, densified ring', () => {

@@ -42,6 +42,12 @@ describe('news tips', () => {
     expect(tips.map((t) => `${t.theme}:${t.count}`)).toEqual(['flood:3', 'snow:2'])
   })
 
+  it('points smoke and air-quality headlines at the haze record', () => {
+    const tips = tipsFromHeadlines(['Wildfire smoke blankets Spokane', 'Air quality alert issued for Yakima County', 'Smokey Bear turns 80'])
+    expect(tips).toHaveLength(1)
+    expect(tips[0]).toMatchObject({ theme: 'smoke', count: 2, variables: ['AOD_55'] })
+  })
+
   it('builds a safe search query', () => {
     expect(newsTipQuery('Côte d"Ivoire (x)')).toMatch(/^"Côte dIvoire x" \(flood OR /)
     expect(newsTipQuery('')).toBeNull()

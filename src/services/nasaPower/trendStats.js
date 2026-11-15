@@ -9,12 +9,34 @@
  *      (standard error widened for lag-1 autocorrelation).
  *
  * Null months are skipped in every calculation.
+ *
+ * A season test (`season: 'spring'`) uses one value per year instead: the
+ * average of that season's three months. The same two tests then run on the
+ * yearly values. The whole-year result also carries a quick scan of all four
+ * seasons, because one place can trend in opposite directions in different
+ * seasons and the whole-year average hides it.
  */
 import { POWER_VARIABLES } from './variables.js'
 
 const MONTHS_PER_DECADE = 120
+const YEARS_PER_DECADE = 10
 const Z95 = 1.959963984540054
 export const MIN_MONTHS_FOR_TREND = 120
+export const MIN_YEARS_FOR_SEASON_TREND = 10
+
+/** Meteorological seasons. `months` are calendar months, 0 = January. Winter is named for the year of its January. */
+export const SEASONS = [
+  { id: 'winter', label: 'Winter', span: 'Dec–Feb', months: [11, 0, 1] },
+  { id: 'spring', label: 'Spring', span: 'Mar–May', months: [2, 3, 4] },
+  { id: 'summer', label: 'Summer', span: 'Jun–Aug', months: [5, 6, 7] },
+  { id: 'fall', label: 'Fall', span: 'Sep–Nov', months: [8, 9, 10] },
+]
+export const SEASON_IDS = SEASONS.map((s) => s.id)
+
+/** 'all' (or anything unknown) → null; otherwise the season definition. */
+export function seasonById(id) {
+  return SEASONS.find((s) => s.id === id) || null
+}
 
 /** Standard normal CDF (Abramowitz & Stegun 7.1.26, |error| < 1.5e-7). */
 export function normalCdf(z) {
@@ -186,10 +208,203 @@ export function fmtP(p) {
 }
 
 /**
- * Full analysis for one variable at one place.
- * @param {{ code: string, months: string[], values: (number|null)[] }} input
+ * One value per year for a season: the mean of its three months. A year
+ * with any of the three missing is null.
+ * @param {string[]} months — consecutive 'YYYY-MM' labels
+ * @param {(number|null)[]} values
+ * @param {{ months: number[] }} season
  */
-export function analyzeTrend({ code, months, values }) {
+export function seasonalMeans(months, values, season) {
+  const byMonth = new Map()
+  months.forEach((ym, i) => byMonth.set(ym, values[i]))
+  const firstYear = Number(months[0]?.slice(0, 4))
+  const lastYear = Number(months[months.length - 1]?.slice(0, 4))
+  const years = []
+  const means = []
+  if (!Number.isFinite(firstYear) || !Number.isFinite(lastYear)) return { years, values: means }
+  for (let y = firstYear; y <= lastYear; y++) {
+    let sum = 0
+    let ok = true
+    for (const m of season.months) {
+      // December belongs to the winter of the following year.
+      const year = m === 11 && season.months.includes(0) ? y - 1 : y
+      const v = byMonth.get(`${year}-${String(m + 1).padStart(2, '0')}`)
+      if (v == null) {
+        ok = false
+        break
+      }
+      sum += v
+    }
+    years.push(y)
+    means.push(ok ? sum / season.months.length : null)
+  }
+  return { years, values: means }
+}
+
+/** Both tests on one series, plus the plain-language verdict. `where` is e.g. ' in spring'. */
+function testTrend({ t, x, stepsPerDecade, meta, where = '' }) {
+  const mk = mannKendallSen(t, x)
+  const ols = linearRegression(t, x)
+
+  const slopePerDecade = mk.slope * stepsPerDecade
+  const ci95 = [mk.ci[0] * stepsPerDecade, mk.ci[1] * stepsPerDecade]
+  const significant = mk.pValue < 0.05 && slopePerDecade !== 0
+  const direction = slopePerDecade > 0 ? 'rising' : slopePerDecade < 0 ? 'falling' : 'flat'
+  const decimals = meta?.decimals ?? 2
+  const unit = meta?.unit && !meta.unit.startsWith('(') ? ` ${meta.unit}` : ''
+  const rate = `${fmtRate(slopePerDecade, decimals)}${unit} per decade`
+
+  let verdict
+  if (significant) {
+    const word = direction === 'rising' ? meta?.rising || 'Rising' : meta?.falling || 'Falling'
+    verdict = `${word}${where}: ${rate}, statistically significant (${fmtP(mk.pValue)}).`
+  } else if (direction === 'flat') {
+    verdict = `No trend detected${where}: the typical change is zero (${fmtP(mk.pValue)}).`
+  } else {
+    const sign = slopePerDecade > 0 ? '+' : '−'
+    verdict = `Not significant yet${where}: ${sign}${rate}, which could still be natural ups and downs (${fmtP(mk.pValue)}).`
+  }
+
+  return {
+    mk,
+    fields: {
+      slopePerDecade,
+      ci95,
+      pValue: mk.pValue,
+      significant,
+      direction,
+      mannKendall: { s: mk.s, z: mk.z, varianceCorrection: mk.varianceCorrection },
+      ols: {
+        slopePerDecade: ols.slope * stepsPerDecade,
+        ci95: [ols.ci[0] * stepsPerDecade, ols.ci[1] * stepsPerDecade],
+        pValue: ols.pValue,
+      },
+      verdict,
+    },
+  }
+}
+
+const NO_TREND = { slopePerDecade: null, ci95: null, pValue: null, significant: false, direction: 'none', ols: null }
+
+/**
+ * Trend test on one season's yearly averages. Same result shape as the
+ * whole-year test, except each point is a year: `months` holds 'YYYY' labels
+ * and `monthsUsed` counts years.
+ */
+function analyzeSeason({ code, months, values, season }) {
+  const meta = POWER_VARIABLES[code]
+  const { years, values: means } = seasonalMeans(months, values, season)
+
+  const t = []
+  const x = []
+  means.forEach((v, i) => {
+    if (v == null) return
+    t.push(i)
+    x.push(v)
+  })
+  const normal = x.length ? x.reduce((a, b) => a + b, 0) / x.length : null
+  const anomalies = means.map((v) => (v == null ? null : v - normal))
+
+  const base = {
+    variable: code,
+    label: meta?.label || code,
+    unit: meta?.unit || '',
+    season: season.id,
+    seasonLabel: season.label,
+    seasonSpan: season.span,
+    step: 'year',
+    months: years.map(String),
+    values: means,
+    anomalies,
+    climatology: [normal],
+    monthsUsed: x.length,
+    firstMonth: t.length ? String(years[t[0]]) : null,
+    lastMonth: t.length ? String(years[t[t.length - 1]]) : null,
+  }
+
+  if (x.length < MIN_YEARS_FOR_SEASON_TREND) {
+    return {
+      ...base,
+      trendLine: anomalies.map(() => null),
+      ...NO_TREND,
+      verdict: `Not enough data here to test a ${season.label.toLowerCase()} trend (${x.length} usable years; at least ${MIN_YEARS_FOR_SEASON_TREND} needed).`,
+    }
+  }
+
+  const { mk, fields } = testTrend({
+    t,
+    x: x.map((v) => v - normal),
+    stepsPerDecade: YEARS_PER_DECADE,
+    meta,
+    where: ` in ${season.label.toLowerCase()}`,
+  })
+  const firstT = t[0]
+  const trendLine = anomalies.map((_, i) => (i < firstT ? null : mk.intercept + mk.slope * i))
+  return { ...base, trendLine, ...fields }
+}
+
+/**
+ * The year where two straight trend lines cross, or null when they do not
+ * cross inside the record.
+ */
+function crossingYear(a, b) {
+  const pts = a.years
+    .map((year, i) => ({ year, diff: a.trendLine[i] == null || b.trendLine[i] == null ? null : a.trendLine[i] - b.trendLine[i] }))
+    .filter((p) => p.diff != null)
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i - 1].diff === 0) return pts[i - 1].year
+    if (pts[i - 1].diff > 0 !== pts[i].diff > 0) return pts[i].year
+  }
+  return null
+}
+
+/**
+ * Quick test of all four seasons, for spotting opposite trends at one place.
+ * Each entry carries the yearly averages and trend line in the variable's
+ * own units, ready to chart.
+ */
+function scanSeasons({ code, months, values }) {
+  const seasons = SEASONS.map((season) => {
+    const r = analyzeSeason({ code, months, values, season })
+    const normal = r.climatology[0]
+    return {
+      id: season.id,
+      label: season.label,
+      span: season.span,
+      years: r.months.map(Number),
+      values: r.values,
+      trendLine: r.trendLine.map((v) => (v == null ? null : v + normal)),
+      yearsUsed: r.monthsUsed,
+      slopePerDecade: r.slopePerDecade,
+      pValue: r.pValue,
+      significant: r.significant,
+      direction: r.direction,
+    }
+  })
+
+  // Opposite trends: the strongest significant rise against the strongest significant fall.
+  const strongest = (dir) =>
+    seasons
+      .filter((s) => s.significant && s.direction === dir)
+      .sort((a, b) => Math.abs(b.slopePerDecade) - Math.abs(a.slopePerDecade))[0]
+  const rising = strongest('rising')
+  const falling = strongest('falling')
+  const oppositeSeasons =
+    rising && falling ? { rising: rising.id, falling: falling.id, crossYear: crossingYear(rising, falling) } : null
+
+  return { seasons, oppositeSeasons }
+}
+
+/**
+ * Full analysis for one variable at one place.
+ * @param {{ code: string, months: string[], values: (number|null)[], season?: string }} input
+ *   `season`: 'winter' | 'spring' | 'summer' | 'fall' tests that season's
+ *   yearly averages; omitted or 'all' tests every month with the seasons removed.
+ */
+export function analyzeTrend({ code, months, values, season }) {
+  const chosen = seasonById(season)
+  if (chosen) return analyzeSeason({ code, months, values, season: chosen })
+
   const meta = POWER_VARIABLES[code]
   const firstMonthIndex = Number(months[0]?.slice(5, 7)) - 1 || 0
   const { anomalies, climatology } = deseasonalize(values, firstMonthIndex)
@@ -206,6 +421,8 @@ export function analyzeTrend({ code, months, values }) {
     variable: code,
     label: meta?.label || code,
     unit: meta?.unit || '',
+    season: 'all',
+    step: 'month',
     months,
     values,
     anomalies,
@@ -213,60 +430,20 @@ export function analyzeTrend({ code, months, values }) {
     monthsUsed: x.length,
     firstMonth: t.length ? months[t[0]] : null,
     lastMonth: t.length ? months[t[t.length - 1]] : null,
+    ...scanSeasons({ code, months, values }),
   }
 
   if (x.length < MIN_MONTHS_FOR_TREND) {
     return {
       ...base,
       trendLine: anomalies.map(() => null),
-      slopePerDecade: null,
-      ci95: null,
-      pValue: null,
-      significant: false,
-      direction: 'none',
-      ols: null,
+      ...NO_TREND,
       verdict: `Not enough data here to test a trend (${x.length} usable months; at least ${MIN_MONTHS_FOR_TREND} needed).`,
     }
   }
 
-  const mk = mannKendallSen(t, x)
-  const ols = linearRegression(t, x)
+  const { mk, fields } = testTrend({ t, x, stepsPerDecade: MONTHS_PER_DECADE, meta })
   const firstT = t[0]
   const trendLine = anomalies.map((_, i) => (i < firstT ? null : mk.intercept + mk.slope * i))
-
-  const slopePerDecade = mk.slope * MONTHS_PER_DECADE
-  const ci95 = [mk.ci[0] * MONTHS_PER_DECADE, mk.ci[1] * MONTHS_PER_DECADE]
-  const significant = mk.pValue < 0.05 && slopePerDecade !== 0
-  const direction = slopePerDecade > 0 ? 'rising' : slopePerDecade < 0 ? 'falling' : 'flat'
-  const decimals = meta?.decimals ?? 2
-  const unit = meta?.unit && !meta.unit.startsWith('(') ? ` ${meta.unit}` : ''
-  const rate = `${fmtRate(slopePerDecade, decimals)}${unit} per decade`
-
-  let verdict
-  if (significant) {
-    const word = direction === 'rising' ? meta?.rising || 'Rising' : meta?.falling || 'Falling'
-    verdict = `${word}: ${rate}, statistically significant (${fmtP(mk.pValue)}).`
-  } else if (direction === 'flat') {
-    verdict = `No trend detected: the typical change is zero (${fmtP(mk.pValue)}).`
-  } else {
-    const sign = slopePerDecade > 0 ? '+' : '−'
-    verdict = `Not significant yet: ${sign}${rate}, which could still be natural ups and downs (${fmtP(mk.pValue)}).`
-  }
-
-  return {
-    ...base,
-    trendLine,
-    slopePerDecade,
-    ci95,
-    pValue: mk.pValue,
-    significant,
-    direction,
-    mannKendall: { s: mk.s, z: mk.z, varianceCorrection: mk.varianceCorrection },
-    ols: {
-      slopePerDecade: ols.slope * MONTHS_PER_DECADE,
-      ci95: [ols.ci[0] * MONTHS_PER_DECADE, ols.ci[1] * MONTHS_PER_DECADE],
-      pValue: ols.pValue,
-    },
-    verdict,
-  }
+  return { ...base, trendLine, ...fields }
 }
