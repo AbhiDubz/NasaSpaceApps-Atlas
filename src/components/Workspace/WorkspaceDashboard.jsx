@@ -59,11 +59,9 @@ export default function WorkspaceDashboard() {
           <button type="button" className="ws-dashboard__header-btn" onClick={() => setCreateOpen(true)}>
             New workspace
           </button>
-          {!user && (
-            <button type="button" className="ws-dashboard__header-btn ws-dashboard__header-btn--ghost" onClick={() => setAppView('workstation')}>
-              Globe demo
-            </button>
-          )}
+          <button type="button" className="ws-dashboard__header-btn ws-dashboard__header-btn--ghost" onClick={() => setAppView('workstation')}>
+            {user ? 'Live globe' : 'Globe demo'}
+          </button>
           {user && (
             <button type="button" className="ws-dashboard__header-btn ws-dashboard__header-btn--ghost" onClick={signOut}>
               Sign out

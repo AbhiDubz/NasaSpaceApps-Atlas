@@ -13,7 +13,7 @@ import {
   destroyEventBus,
 } from '../core/eventBus'
 import { isLayerToggleOn, SUBMISSION_DEFAULT_OFF_LAYER_KEYS, SUBMISSION_DEFAULT_OFF_V2_LAYER_KEYS } from '../core/layerCatalog'
-import { supabase } from '../services/supabase'
+import { supabase, hasStoredAuthSession, hasOAuthCallbackParams } from '../services/supabase'
 import { resolveFocusBboxForIsoCodes } from '../core/workspaceMatch'
 import {
   buildInvestigationFromWorkspace,
@@ -229,7 +229,36 @@ function loadSources() {
 }
 
 function loadOnboarded() {
-  return localStorage.getItem(STORAGE_KEY_ONBOARDED) === 'true'
+  if (hasStoredAuthSession() || hasOAuthCallbackParams()) return true
+  try {
+    return localStorage.getItem(STORAGE_KEY_ONBOARDED) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function loadLandingAcknowledged() {
+  return hasStoredAuthSession() || hasOAuthCallbackParams()
+}
+
+function readCachedWorkspaces(userId) {
+  if (!userId) return []
+  try {
+    const raw = localStorage.getItem(`atlas_workspaces_${userId}`)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeCachedWorkspaces(userId, list) {
+  if (!userId) return
+  try {
+    localStorage.setItem(`atlas_workspaces_${userId}`, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
 }
 
 // Load persisted quality state
@@ -262,9 +291,13 @@ function loadActiveDimensions() {
 }
 
 function loadFilters() {
-  const params = new URLSearchParams(window.location.search)
-  return {
-    time: params.get('time') || localStorage.getItem('atlas_time_filter') || 'live',
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return {
+      time: params.get('time') || localStorage.getItem('atlas_time_filter') || 'live',
+    }
+  } catch {
+    return { time: 'live' }
   }
 }
 
@@ -291,8 +324,9 @@ export const useAtlasStore = create((set, get) => ({
   zoomLevel: 1,
   selectedSources: loadSources(),
   hasCompletedOnboarding: loadOnboarded(),
-  /** Marketing / explainer screen — not persisted; every fresh load starts here until dismissed */
-  landingAcknowledged: false,
+  /** Marketing / explainer screen — skipped automatically when a session or OAuth callback is present */
+  landingAcknowledged: loadLandingAcknowledged(),
+  landingReopenedManually: false,
   sourceCatalog: [],
   streetViewLocation: null,
   isStreetViewOpen: false,
@@ -334,7 +368,7 @@ export const useAtlasStore = create((set, get) => ({
   activeDimensions: loadActiveDimensions(),
   focusedEventId: null,
   anomalies: [],
-  colorblindMode: localStorage.getItem('atlas_colorblind') === 'true',
+  colorblindMode: loadBoolPref('atlas_colorblind', false),
   mobileMode: false,
   lowBandwidthMode: false,
 
@@ -349,7 +383,9 @@ export const useAtlasStore = create((set, get) => ({
   /** Reticle rings + target ID labels on markers */
   detectionMode: loadBoolPref(STORAGE_KEY_DETECTION_MODE, false),
   /** 'sparse' | 'dense' — detection label density */
-  detectionLabelDensity: localStorage.getItem(STORAGE_KEY_DETECTION_LABELS) || 'sparse',
+  detectionLabelDensity: (() => {
+    try { return localStorage.getItem(STORAGE_KEY_DETECTION_LABELS) || 'sparse' } catch { return 'sparse' }
+  })(),
 
   // ── Auth / User ──
   user: null,
@@ -469,7 +505,7 @@ export const useAtlasStore = create((set, get) => ({
     })
   },
 
-  acknowledgeLanding: () => set({ landingAcknowledged: true }),
+  acknowledgeLanding: () => set({ landingAcknowledged: true, landingReopenedManually: false }),
 
   reopenLanding: () => {
     try {
@@ -477,7 +513,7 @@ export const useAtlasStore = create((set, get) => ({
     } catch {
       /* ignore */
     }
-    set({ landingAcknowledged: false })
+    set({ landingAcknowledged: false, landingReopenedManually: true })
   },
 
   startLaunchTransition: () => set({ launchTransitionActive: true }),
@@ -608,6 +644,14 @@ export const useAtlasStore = create((set, get) => ({
     const state = get()
     saveQualitySettings({ tier: state.qualityTier, resolved: state.resolvedTier, overrides: {} })
     set({ qualityOverrides: {} })
+  },
+
+  setQualityOverrides: (overrides = {}) => {
+    const state = get()
+    const clean = overrides && typeof overrides === 'object' ? { ...overrides } : {}
+    delete clean.__atlas_ext
+    saveQualitySettings({ tier: state.qualityTier, resolved: state.resolvedTier, overrides: clean })
+    set({ qualityOverrides: clean })
   },
 
   // ── Phase 5 — Dossier (place/topic investigation) ──
@@ -1039,8 +1083,21 @@ export const useAtlasStore = create((set, get) => ({
     const next = new Set(s.activeDimensions)
     if (next.has(dimension)) next.delete(dimension)
     else next.add(dimension)
+    try {
+      localStorage.setItem('atlas_active_dimensions', JSON.stringify([...next]))
+    } catch { /* ignore */ }
     return { activeDimensions: next }
   }),
+
+  setActiveDimensions: (dimensions) => {
+    const list = Array.isArray(dimensions) ? dimensions : [...(dimensions || [])]
+    const valid = list.filter((d) => DEFAULT_DIMENSIONS.includes(d))
+    const next = new Set(valid.length ? valid : DEFAULT_DIMENSIONS)
+    try {
+      localStorage.setItem('atlas_active_dimensions', JSON.stringify([...next]))
+    } catch { /* ignore */ }
+    set({ activeDimensions: next })
+  },
 
   toggleColorblindMode: () => set((s) => {
     const next = !s.colorblindMode
@@ -1048,6 +1105,15 @@ export const useAtlasStore = create((set, get) => ({
     document.body.setAttribute('data-colorblind', String(next))
     return { colorblindMode: next }
   }),
+
+  setColorblindMode: (enabled) => {
+    const next = Boolean(enabled)
+    try { localStorage.setItem('atlas_colorblind', String(next)) } catch { /* ignore */ }
+    if (typeof document !== 'undefined') {
+      document.body.setAttribute('data-colorblind', String(next))
+    }
+    set({ colorblindMode: next })
+  },
 
   setMobileMode: (v) => set({ mobileMode: v }),
   setLowBandwidthMode: (v) => set({ lowBandwidthMode: v }),
@@ -1078,6 +1144,14 @@ export const useAtlasStore = create((set, get) => ({
     set({ dataLayers: next, layerRevealAt })
     if (state.eventBusReady) reconcileLayerSources(next)
   },
+  setDataLayers: (layers) => {
+    if (!layers || typeof layers !== 'object') return
+    const state = get()
+    const next = { ...DEFAULT_DATA_LAYERS, ...state.dataLayers, ...layers }
+    persistDataLayers(next)
+    set({ dataLayers: next })
+    if (state.eventBusReady) reconcileLayerSources(next)
+  },
 
   setGdeltGeoBootstrap: (partial) =>
     set((s) => ({
@@ -1089,12 +1163,22 @@ export const useAtlasStore = create((set, get) => ({
     persistBoolPref(STORAGE_KEY_TACTICAL_MODE, next)
     return { tacticalMode: next }
   }),
+  setTacticalMode: (enabled) => {
+    const next = Boolean(enabled)
+    persistBoolPref(STORAGE_KEY_TACTICAL_MODE, next)
+    set({ tacticalMode: next })
+  },
 
   toggleDetectionMode: () => set((s) => {
     const next = !s.detectionMode
     persistBoolPref(STORAGE_KEY_DETECTION_MODE, next)
     return { detectionMode: next }
   }),
+  setDetectionMode: (enabled) => {
+    const next = Boolean(enabled)
+    persistBoolPref(STORAGE_KEY_DETECTION_MODE, next)
+    set({ detectionMode: next })
+  },
 
   setDetectionLabelDensity: (density) => {
     const mode = density === 'dense' ? 'dense' : 'sparse'
@@ -1113,18 +1197,25 @@ export const useAtlasStore = create((set, get) => ({
       set({ user: null })
       return
     }
-    const { activeWorkspaceId } = get()
-    set({
+    const { activeWorkspaceId, landingReopenedManually } = get()
+    const cachedWorkspaces = readCachedWorkspaces(user.id)
+    try {
+      localStorage.setItem(STORAGE_KEY_ONBOARDED, 'true')
+    } catch { /* ignore */ }
+    set((s) => ({
       user,
-      appView: activeWorkspaceId ? 'workstation' : 'dashboard',
-    })
+      workspaces: s.workspaces.length ? s.workspaces : cachedWorkspaces,
+      hasCompletedOnboarding: true,
+      ...(landingReopenedManually ? {} : { landingAcknowledged: true }),
+      appView: activeWorkspaceId ? 'workstation' : s.appView || 'workstation',
+    }))
   },
 
   signOut: async () => {
     if (supabase) await supabase.auth.signOut()
     set({
       user: null,
-      appView: 'dashboard',
+      appView: 'workstation',
       activeWorkspaceId: null,
       workspaceEvents: [],
       investigation: null,
@@ -1142,7 +1233,12 @@ export const useAtlasStore = create((set, get) => ({
 
   loadWorkspaces: async () => {
     const { user } = get()
-    if (!user || !supabase) return
+    if (!user) return
+    const cached = readCachedWorkspaces(user.id)
+    if (cached.length && !get().workspaces.length) {
+      set({ workspaces: cached })
+    }
+    if (!supabase) return
     set({ workspacesLoading: true })
     const { data, error } = await supabase
       .from('workspaces')
@@ -1150,8 +1246,12 @@ export const useAtlasStore = create((set, get) => ({
       .eq('user_id', user.id)
       .neq('status', 'archived')
       .order('updated_at', { ascending: false })
-    if (!error) set({ workspaces: data || [], workspacesLoading: false })
-    else set({ workspacesLoading: false })
+    if (!error && Array.isArray(data)) {
+      writeCachedWorkspaces(user.id, data)
+      set({ workspaces: data, workspacesLoading: false })
+    } else {
+      set({ workspacesLoading: false })
+    }
   },
 
   loadWorkspaceEvents: async (workspaceId) => {
@@ -1253,36 +1353,58 @@ export const useAtlasStore = create((set, get) => ({
     }
     const { data, error } = await supabase.from('workspaces').insert(row).select().single()
     if (error) {
-      get().pushToast({ label: 'Workspace', message: error.message || 'Could not create workspace' })
-      return null
+      // Fallback to local workspace persistence if the remote table is not migrated yet
+      const localWs = {
+        ...row,
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      set((s) => {
+        const next = [localWs, ...s.workspaces]
+        writeCachedWorkspaces(user.id, next)
+        return { workspaces: next }
+      })
+      get().pushToast({ label: 'Workspace', message: `Created ${localWs.name}` })
+      return localWs
     }
-    set((s) => ({ workspaces: [data, ...s.workspaces] }))
+    set((s) => {
+      const next = [data, ...s.workspaces]
+      writeCachedWorkspaces(user.id, next)
+      return { workspaces: next }
+    })
     get().pushToast({ label: 'Workspace', message: `Created ${data.name}` })
     return data
   },
 
   updateWorkspace: async (id, patch) => {
-    if (!supabase) return false
+    const { user } = get()
     const updates = { ...patch, updated_at: new Date().toISOString() }
     if (patch.focus_regions) {
       updates.focus_bbox = await resolveFocusBboxForIsoCodes(patch.focus_regions)
     }
-    const { error } = await supabase.from('workspaces').update(updates).eq('id', id)
-    if (error) {
-      get().pushToast({ label: 'Workspace', message: error.message })
-      return false
+    if (supabase) {
+      await supabase.from('workspaces').update(updates).eq('id', id)
     }
-    set((s) => ({
-      workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, ...updates } : w)),
-    }))
+    set((s) => {
+      const next = s.workspaces.map((w) => (w.id === id ? { ...w, ...updates } : w))
+      if (user) writeCachedWorkspaces(user.id, next)
+      return { workspaces: next }
+    })
     if (get().activeWorkspaceId === id) get().applyWorkspaceConfig(get().getActiveWorkspace())
     return true
   },
 
   archiveWorkspace: async (id) => {
-    if (!supabase) return
-    await supabase.from('workspaces').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', id)
-    set((s) => ({ workspaces: s.workspaces.filter((w) => w.id !== id) }))
+    const { user } = get()
+    if (supabase) {
+      await supabase.from('workspaces').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', id)
+    }
+    set((s) => {
+      const next = s.workspaces.filter((w) => w.id !== id)
+      if (user) writeCachedWorkspaces(user.id, next)
+      return { workspaces: next }
+    })
     if (get().activeWorkspaceId === id) get().exitWorkspace()
     get().pushToast({ label: 'Workspace', message: 'Workspace archived' })
   },

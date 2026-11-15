@@ -21,7 +21,13 @@ import { useOntologyHydration } from './hooks/useOntologyHydration'
 import ToastHost from './components/UI/ToastHost'
 import CountryContextMenu from './components/UI/CountryContextMenu'
 import GlobeLegend from './components/UI/GlobeLegend'
-import { supabase } from './services/supabase'
+import {
+  supabase,
+  consumeOAuthPending,
+  hasOAuthCallbackParams,
+  readOAuthCallbackError,
+  scrubOAuthCallbackUrl,
+} from './services/supabase'
 import { loadCountryPolygons } from './services/countryIndex'
 import { LANDMARK_SHORTCUT_KEYS } from './config/landmarkPresets'
 import LandingPage from './components/Landing/LandingPage'
@@ -132,14 +138,6 @@ function AtlasLiveApp() {
     if (user && onGlobeView) loadWorkspaces()
   }, [user, onGlobeView, loadWorkspaces])
 
-  useEffect(() => {
-    if (!onGlobeView || !user) return
-    const { appView: view, activeWorkspaceId: wsId } = useAtlasStore.getState()
-    if (view === 'workstation' && !wsId) {
-      useAtlasStore.getState().setAppView('dashboard')
-    }
-  }, [user, onGlobeView, appView, activeWorkspaceId])
-
   const showDashboard = onGlobeView && user && appView === 'dashboard'
   const showGlobeWorkstation = onGlobeView && !showDashboard
   const inWorkspace = showGlobeWorkstation && Boolean(activeWorkspaceId)
@@ -166,18 +164,42 @@ function AtlasLiveApp() {
       useAtlasStore.getState().setAuthReady()
       return undefined
     }
+    const hadOAuthCallback = hasOAuthCallbackParams()
+    const oauthPending = consumeOAuthPending()
+    const oauthErr = readOAuthCallbackError()
+    if (oauthErr) {
+      useAtlasStore.getState().pushToast({ label: 'Auth', message: oauthErr })
+      scrubOAuthCallbackUrl()
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const store = useAtlasStore.getState()
         store.setUser(session.user)
         syncTourDecisionToAccount(session.user)
-        if (!store.activeWorkspaceId) store.setAppView('dashboard')
+        if (!store.activeWorkspaceId) store.setAppView('workstation')
+        if (hadOAuthCallback || oauthPending) {
+          scrubOAuthCallbackUrl()
+          store.pushToast({
+            label: 'Account',
+            message: `Signed in as ${session.user.email || 'analyst'}`,
+          })
+        }
+      } else if (hadOAuthCallback) {
+        scrubOAuthCallbackUrl()
       }
     }).finally(() => useAtlasStore.getState().setAuthReady())
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null
-      useAtlasStore.getState().setUser(nextUser)
-      if (nextUser) syncTourDecisionToAccount(nextUser)
+      const store = useAtlasStore.getState()
+      store.setUser(nextUser)
+      if (nextUser) {
+        syncTourDecisionToAccount(nextUser)
+        if (event === 'SIGNED_IN' && hasOAuthCallbackParams()) {
+          scrubOAuthCallbackUrl()
+        }
+      }
     })
     return () => subscription.unsubscribe()
   }, [])

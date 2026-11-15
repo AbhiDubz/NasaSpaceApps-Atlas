@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { supabase } from '../../services/supabase'
+import {
+  supabase,
+  isSupabaseConfigured,
+  markOAuthPending,
+  readOAuthCallbackError,
+} from '../../services/supabase'
 import { useAtlasStore } from '../../store/atlasStore'
 
 /**
@@ -9,54 +14,96 @@ import { useAtlasStore } from '../../store/atlasStore'
  */
 export default function AuthStep({ onSuccess, allowGuest = false, initialMode = 'idle' }) {
   const setUser = useAtlasStore((s) => s.setUser)
+  const acknowledgeLanding = useAtlasStore((s) => s.acknowledgeLanding)
+  const launchWithAllSources = useAtlasStore((s) => s.launchWithAllSources)
 
-  const [mode, setMode] = useState(initialMode)
+  const [mode, setMode] = useState(initialMode === 'idle' ? 'signin' : initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState(null)
+  const [error, setError] = useState(() => readOAuthCallbackError())
   const [loading, setLoading] = useState(false)
+  const [oauthRedirecting, setOauthRedirecting] = useState(false)
   const [confirmationSent, setConfirmationSent] = useState(false)
 
   const proceed = (user) => {
-    if (user) setUser(user)
+    if (user) {
+      setUser(user)
+      acknowledgeLanding()
+      launchWithAllSources()
+    }
     onSuccess?.(user ?? null)
+  }
+
+  const getRedirectUrl = () => {
+    if (typeof window === 'undefined') return undefined
+    return `${window.location.origin}${window.location.pathname}`
   }
 
   const handleGoogle = async () => {
     if (!supabase) {
-      proceed(null)
+      setError(
+        'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file and restart the dev server.',
+      )
       return
     }
     setLoading(true)
+    setOauthRedirecting(true)
     setError(null)
+    markOAuthPending('google')
+
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: getRedirectUrl(),
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
+      },
     })
-    if (err) setError(err.message)
-    setLoading(false)
+    if (err) {
+      setError(err.message)
+      setLoading(false)
+      setOauthRedirecting(false)
+    }
   }
 
   const handleEmailAuth = async (e) => {
     e.preventDefault()
     if (!supabase) {
-      proceed(null)
+      setError(
+        'Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file and restart the dev server.',
+      )
       return
     }
     setLoading(true)
     setError(null)
 
+    const cleanEmail = email.trim()
+
     if (mode === 'register') {
-      const { data, error: err } = await supabase.auth.signUp({ email, password })
+      const { data, error: err } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          emailRedirectTo: getRedirectUrl(),
+        },
+      })
       if (err) {
         setError(err.message)
       } else if (data?.user?.identities?.length === 0) {
-        setError('An account with this email already exists.')
+        setError('An account with this email already exists. Try signing in instead.')
+      } else if (data?.session && data?.user) {
+        // Email confirmation is disabled in Supabase — user is signed in immediately.
+        proceed(data.user)
       } else {
         setConfirmationSent(true)
       }
     } else {
-      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
+      const { data, error: err } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      })
       if (err) {
         setError(err.message)
       } else {
@@ -97,6 +144,18 @@ export default function AuthStep({ onSuccess, allowGuest = false, initialMode = 
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
       className="w-full flex flex-col gap-6"
     >
+      {!isSupabaseConfigured && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3.5 py-2.5 text-xs leading-relaxed text-amber-200/90"
+        >
+          <span className="font-semibold text-amber-100">Auth env missing:</span> add{' '}
+          <code className="rounded bg-black/30 px-1 py-0.5 font-mono text-[11px]">VITE_SUPABASE_URL</code> and{' '}
+          <code className="rounded bg-black/30 px-1 py-0.5 font-mono text-[11px]">VITE_SUPABASE_ANON_KEY</code> to{' '}
+          <code className="rounded bg-black/30 px-1 py-0.5 font-mono text-[11px]">.env</code> to enable Google OAuth and cloud sync.
+        </div>
+      )}
+
       <button
         type="button"
         onClick={handleGoogle}
@@ -109,7 +168,7 @@ export default function AuthStep({ onSuccess, allowGuest = false, initialMode = 
           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
         </svg>
-        <span>Continue with Google</span>
+        <span>{oauthRedirecting ? 'Redirecting to Google…' : 'Continue with Google'}</span>
       </button>
 
       <p className="auth-divider">or use your email</p>
@@ -144,7 +203,7 @@ export default function AuthStep({ onSuccess, allowGuest = false, initialMode = 
         </div>
 
         {error && (
-          <p className="text-xs text-red-400 text-center leading-relaxed">
+          <p role="alert" className="text-xs text-red-400 text-center leading-relaxed">
             {error}
           </p>
         )}
@@ -152,7 +211,6 @@ export default function AuthStep({ onSuccess, allowGuest = false, initialMode = 
         <button
           type="submit"
           disabled={loading || !email || !password}
-          onClick={() => { if (mode === 'idle') setMode('signin') }}
           className="auth-btn-primary"
         >
           {loading ? '…' : mode === 'register' ? 'Create account' : 'Sign in'}
@@ -171,10 +229,14 @@ export default function AuthStep({ onSuccess, allowGuest = false, initialMode = 
           {mode === 'register' ? 'Already have an account? Sign in' : 'New here? Create an account'}
         </button>
 
-        {allowGuest && (
+        {(allowGuest || !isSupabaseConfigured) && (
           <button
             type="button"
-            onClick={() => proceed(null)}
+            onClick={() => {
+              acknowledgeLanding()
+              launchWithAllSources()
+              proceed(null)
+            }}
             className="auth-link text-xs"
           >
             Continue without an account

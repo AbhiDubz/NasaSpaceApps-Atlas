@@ -3,6 +3,7 @@ import { useAtlasStore } from '../store/atlasStore'
 import { deserializeAtlasUrlState, writeAtlasUrlState } from '../core/urlState'
 import { DIMENSION_KEYS } from '../core/eventSchema'
 import { loadCountryIndex, findCountry } from '../services/countryIndex'
+import { hasOAuthCallbackParams } from '../services/supabase'
 
 const SYNC_DEBOUNCE_MS = 450
 const CAMERA_DEBOUNCE_MS = 800
@@ -119,7 +120,7 @@ export function useAtlasUrlSync(enabled = true) {
     if (!enabled) return undefined
 
     const scheduleWrite = () => {
-      if (skipWriteRef.current) return
+      if (skipWriteRef.current || hasOAuthCallbackParams()) return
       clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
         writeAtlasUrlState(pickUrlSyncState(useAtlasStore.getState()))
