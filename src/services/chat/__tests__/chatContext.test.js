@@ -73,8 +73,8 @@ describe('buildChatContext', () => {
 })
 
 describe('suggestedQuestions', () => {
-  it('offers getting-started questions with no place picked', () => {
-    expect(suggestedQuestions(null)[0]).toMatch(/Trend Detective/)
+  it('offers data questions with no place picked', () => {
+    expect(suggestedQuestions(null)[0]).toMatch(/Seattle last February/)
   })
 
   it('asks about opposite seasons when the case has them', () => {
