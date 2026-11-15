@@ -24,9 +24,11 @@ import {
 import { TREND_DEMOS, demoPlaceLabel } from '../../services/nasaPower/demos.js'
 import { fmtP } from '../../services/nasaPower/trendStats.js'
 import { OUTSIDE_REGION_MESSAGE, REGION_BBOX, REGION_NAME } from '../../services/nasaPower/region.js'
+import { gridCell } from '../../services/nasaPower/grid.js'
+import { TREND_PLACE_COLORS } from '../../hooks/useTrendOverlays'
 import { PlaceNewsTips, RegionNewsTips } from './NewsTips'
 
-const PLACE_COLORS = ['#38bdf8', '#fb923c']
+const PLACE_COLORS = TREND_PLACE_COLORS
 const TREND_COLOR = '#facc15'
 const AXIS_TICK = { fill: 'rgba(226,232,240,0.6)', fontSize: 11 }
 const GRID_STROKE = 'rgba(255,255,255,0.08)'
@@ -152,6 +154,7 @@ function CaseSection({ place, variable, color, compact, onRemove }) {
 
   const unit = meta.unit.startsWith('(') ? '' : meta.unit
   const d = meta.decimals
+  const cell = gridCell(place.lat, place.lng, variable)
 
   return (
     <section className="flex flex-col gap-3" aria-label={`Trend at ${placeName(place)}`}>
@@ -162,6 +165,13 @@ function CaseSection({ place, variable, color, compact, onRemove }) {
           {placeName(place) !== formatCoords(place.lat, place.lng) ? (
             <p className="font-data text-sm text-muted">{formatCoords(place.lat, place.lng)}</p>
           ) : null}
+          <p className="text-sm leading-normal text-muted">
+            Data covers the{' '}
+            <span className="font-semibold" style={{ color }}>
+              outlined box
+            </span>{' '}
+            on the map: about {cell.kmNS} × {cell.kmEW} km ({cell.source} grid cell)
+          </p>
         </div>
         {onRemove ? (
           <button type="button" className={cn(BTN, BTN_IDLE)} onClick={onRemove} aria-label={`Remove ${placeName(place)}`}>
@@ -425,7 +435,7 @@ export default function TrendCaseFile() {
         </div>
 
         <p className="text-sm leading-normal text-muted">
-          {POWER_CREDIT} Values are model-based estimates for the roughly 50 km grid cell around each point, not a single weather station.
+          {POWER_CREDIT} Values are model-based estimates for the whole grid cell outlined on the map (about 55 × 47 km; sunlight uses larger 1° cells), not a single weather station.
         </p>
       </div>
     </aside>

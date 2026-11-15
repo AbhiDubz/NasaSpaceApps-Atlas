@@ -12,6 +12,7 @@ import { isMobileDevice } from '../../config/qualityTiers'
 import { GIBS_IMAGERY_LAYERS, GIBS_IMAGERY_LAYER_KEYS, gibsMaplibreTiles } from '../../config/gibsBasemap'
 import { terminatorGeoJsonLine } from '../../core/solarTerminator'
 import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
+import { useTrendOverlays } from '../../hooks/useTrendOverlays'
 import {
   useGlobeViewModels,
   applyMarkerClick,
@@ -116,8 +117,8 @@ export default function FlatMap({ onGlobeReady }) {
   const detectionMode = useAtlasStore((s) => s.detectionMode)
   const detectionLabelDensity = useAtlasStore((s) => s.detectionLabelDensity)
   const selectedEvent = useAtlasStore((s) => s.selectedEvent)
-  /** Trend Detective is open: outline its study region (Washington State). */
-  const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
+  /** Trend Detective is open: outline its study region and each place's NASA grid cell. */
+  const { regionOn: trendRegionOn, cells: trendCells } = useTrendOverlays()
   // No field layers on the 2D map — skip GDELT geo overlay fetching entirely.
   const { allMarkers } = useGlobeViewModels({ withFields: false })
   const visibleEvents = useMemo(() => allMarkers.map((vm) => vm.raw), [allMarkers])
@@ -630,6 +631,39 @@ export default function FlatMap({ onGlobeReady }) {
     }
     m.setLayoutProperty('trend-region-line', 'visibility', trendRegionOn ? 'visible' : 'none')
   }, [trendRegionOn, mapReady])
+
+  // ── Trend Detective grid cells (the area each place's NASA data covers) ──
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !mapReady) return
+    const data = {
+      type: 'FeatureCollection',
+      features: trendCells.map((c) => ({
+        type: 'Feature',
+        properties: { color: c.color },
+        geometry: { type: 'Polygon', coordinates: [c.ring] },
+      })),
+    }
+    const src = m.getSource('trend-cells')
+    if (src) {
+      src.setData(data)
+      return
+    }
+    m.addSource('trend-cells', { type: 'geojson', data })
+    m.addLayer({
+      id: 'trend-cells-fill',
+      type: 'fill',
+      source: 'trend-cells',
+      paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 },
+    })
+    m.addLayer({
+      id: 'trend-cells-line',
+      type: 'line',
+      source: 'trend-cells',
+      layout: { 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'color'], 'line-width': 2.5 },
+    })
+  }, [trendCells, mapReady])
 
   return (
     <div

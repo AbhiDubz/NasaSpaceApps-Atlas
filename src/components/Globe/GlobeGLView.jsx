@@ -27,6 +27,7 @@ import {
 import * as solar from 'solar-calculator'
 import { useAtlasStore } from '../../store/atlasStore'
 import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
+import { useTrendOverlays } from '../../hooks/useTrendOverlays'
 import { isMobileDevice } from '../../config/qualityTiers'
 import { getTimezoneViewCenter } from '../../utils/geo'
 import {
@@ -345,8 +346,8 @@ export default function GlobeGLView({ onGlobeReady }) {
     const [closeZoom, setCloseZoom] = useState(false)
     const satelliteTilesOn = closeZoom && !gibsImageryKey
     const terminatorOn = dataLayers?.terminator !== false
-    /** Trend Detective is open: outline its study region (Washington State). */
-    const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
+    /** Trend Detective is open: outline its study region and each place's NASA grid cell. */
+    const { regionOn: trendRegionOn, cells: trendCells } = useTrendOverlays()
     const windOn = dataLayers?.windOverlay === true
     const getWindFrame = useCallback((w, h) => globeGlWindFrame(globeRef.current, w, h), [])
 
@@ -857,6 +858,9 @@ export default function GlobeGLView({ onGlobeReady }) {
                     paths.push({ coords: ring.map(([x, y]) => [x, y, 0.0012]), color: REGION_OUTLINE_COLOR, stroke: 2.5 })
                 }
             }
+            for (const c of trendCells) {
+                paths.push({ coords: c.ring.map(([x, y]) => [x, y, 0.0015]), color: c.color, stroke: 3 })
+            }
             if (terminatorOn) {
                 const ring = buildTerminatorRing(new Date())
                 paths.push({ coords: ring.map((p) => [p.lng, p.lat]) })
@@ -871,7 +875,7 @@ export default function GlobeGLView({ onGlobeReady }) {
         syncPaths()
         const id = setInterval(syncPaths, 60_000)
         return () => clearInterval(id)
-    }, [terminatorOn, stormOverlays, trendRegionOn])
+    }, [terminatorOn, stormOverlays, trendRegionOn, trendCells])
 
     // ── Marker view-model sync ──
     useEffect(() => {

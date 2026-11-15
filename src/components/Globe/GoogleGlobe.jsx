@@ -49,6 +49,7 @@ import useShareCameraBridge from '../../hooks/useShareCameraBridge'
 import { PLACE_SEARCH_PIN_SRC } from '../../constants/placeSearchPin'
 import { buildTerminatorRing } from '../../core/solarTerminator'
 import { REGION_OUTLINE, REGION_OUTLINE_COLOR } from '../../services/nasaPower/region.js'
+import { useTrendOverlays } from '../../hooks/useTrendOverlays'
 import Model3D from './Model3D'
 import WindParticleOverlay from './WindParticleOverlay'
 import { map3dWindFrame } from '../../globe-core/windFrames'
@@ -296,8 +297,8 @@ function InnerMap({ onGlobeReady }) {
 
   const dataLayers = useAtlasStore((s) => s.dataLayers)
   const terminatorOn = dataLayers?.terminator !== false
-  /** Trend Detective is open: outline its study region (Washington State). */
-  const trendRegionOn = useAtlasStore((s) => Boolean(s.trendCase))
+  /** Trend Detective is open: outline its study region and each place's NASA grid cell. */
+  const { regionOn: trendRegionOn, cells: trendCells } = useTrendOverlays()
   const windOn = dataLayers?.windOverlay === true
   /** Camera snapshot for the wind overlay, read straight off the map element so it tracks fly-to animations. */
   const getWindFrame = useCallback((width, height) => {
@@ -1052,6 +1053,20 @@ function InnerMap({ onGlobeReady }) {
               strokeColor={REGION_OUTLINE_COLOR}
               strokeWidth={4}
               // outerWidth is a fraction (0–1) of strokeWidth: a thin dark edge for contrast
+              outerColor="rgba(0, 0, 0, 0.45)"
+              outerWidth={0.3}
+            />
+          ))}
+
+        {vectorLayersReady &&
+          trendCells.map((c) => (
+            // Keyed by cell: this map ignores prop changes on a mounted polyline, so a new cell remounts.
+            <Polyline3D
+              key={`trend-cell-${c.key}`}
+              coordinates={c.ring.map(([lng, lat]) => ({ lat, lng }))}
+              altitudeMode={AltitudeMode.CLAMP_TO_GROUND}
+              strokeColor={c.color}
+              strokeWidth={4}
               outerColor="rgba(0, 0, 0, 0.45)"
               outerWidth={0.3}
             />
